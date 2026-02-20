@@ -68,4 +68,4 @@ pip install -r requirements.txt
 Faurge is currently in **Phase 1: The Shell**. We are establishing the core PipeWire routing, the VRAM watchdog daemon, and manual DSP controls.
 
 ---
-*Faurge development is concurrent with owrk on [Sentinel](https://github.com/kosher-t/sentinel).*
+*Faurge development is concurrent with work on [Sentinel](https://github.com/kosher-t/sentinel).*
