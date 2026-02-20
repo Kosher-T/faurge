@@ -10,7 +10,7 @@ psutil                 # CPU/RAM usage tracking
 
 # --- AI & Agent Infrastructure ---
 ollama                 # Interface for local LLM inference
-# torch/tensorflow                # (Reserved for Phase 3/5: Agent 1 & 2)
+# torch/tensorflow     # (Reserved for Phase 3/5: Agent 1 & 2)
 
 # --- GUI (Phase 1 Shell) ---
 PyQt6                  # Modern desktop interface
