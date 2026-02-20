@@ -1,0 +1,16 @@
+# --- Audio Core ---
+pipewire-python        # PipeWire Python bindings
+numpy                  # Array manipulation for Shadow Space FFT
+scipy                  # Signal processing (filters, deconvolution)
+pyloudnorm             # LUFS/EBU R128 loudness analysis
+
+# --- System & GPU Watchdog ---
+pynvml                 # NVIDIA Management Library for VRAM monitoring
+psutil                 # CPU/RAM usage tracking
+
+# --- AI & Agent Infrastructure ---
+ollama                 # Interface for local LLM inference
+# torch                # (Reserved for Phase 3/5: Agent 1 & 2)
+
+# --- GUI (Phase 1 Shell) ---
+PyQt6                  # Modern desktop interface
