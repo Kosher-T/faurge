@@ -1,8 +1,8 @@
 # --- Core AI & Deep Learning ---
-torch>=2.0.0          # The foundation for Fabian, Ursula, and Genesis
-torchaudio>=2.0.0     # For DDSP operations and STFT math
-transformers>=4.30.0  # Required for underlying model loading
-laion-clap>=1.1.4     # Fabian's frozen audio-semantic brain
+tensorflow>=2.15.0    # The foundation for Fabian, Ursula, and Genesis
+ddsp>=1.2.0           # Google Magenta's official Differentiable DSP library
+transformers>=4.30.0  # To load the CLAP model via Hugging Face's TF integration
+tf-keras>=2.15.0      # For Ursula's Reinforcement Learning networks
 
 # --- Audio Feature Extraction & Math ---
 librosa>=0.10.0       # For STFT, LTAS calculation, ZCR, and Crest Factor
