@@ -1,16 +1,19 @@
-# --- Audio Core ---
-pipewire-python        # PipeWire Python bindings
-numpy                  # Array manipulation for Shadow Space FFT
-scipy                  # Signal processing (filters, deconvolution)
-pyloudnorm             # LUFS/EBU R128 loudness analysis
+# --- Core AI & Deep Learning ---
+torch>=2.0.0          # The foundation for Fabian, Ursula, and Genesis
+torchaudio>=2.0.0     # For DDSP operations and STFT math
+transformers>=4.30.0  # Required for underlying model loading
+laion-clap>=1.1.4     # Fabian's frozen audio-semantic brain
 
-# --- System & GPU Watchdog ---
-pynvml                 # NVIDIA Management Library for VRAM monitoring
-psutil                 # CPU/RAM usage tracking
+# --- Audio Feature Extraction & Math ---
+librosa>=0.10.0       # For STFT, LTAS calculation, ZCR, and Crest Factor
+soundfile>=0.12.1     # For reading/writing the 32-bit float IR .wav files
+pyloudnorm>=0.1.1     # The industry standard Python library for exact LUFS & LRA math
 
-# --- AI & Agent Infrastructure ---
-ollama                 # Interface for local LLM inference
-# torch/tensorflow     # (Reserved for Phase 3/5: Agent 1 & 2)
+# --- Reinforcement Learning (Ursula) ---
+gymnasium>=0.29.0     # The sandbox environment framework for Ursula's training
 
-# --- GUI (Phase 1 Shell) ---
-PyQt6                  # Modern desktop interface
+# --- System & Hardware Interaction ---
+pynvml>=11.5.0        # NVIDIA Management Library wrapper for the VRAM Watchdog
+python-osc>=1.8.3     # Open Sound Control protocol to talk to the headless DSP plugins
+numpy>=1.24.0         # Matrix operations
+scipy>=1.10.1         # Scientific computing for the harmonic oscillators
