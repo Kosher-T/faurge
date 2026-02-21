@@ -18,6 +18,10 @@ DIRS = {
     "DSP_PRESETS": BASE_DIR / "dsp" / "presets",
     "DATA": BASE_DIR / "data",
     "STATE": BASE_DIR / "state",
+    # --- Added: MLOps & System Directories ---
+    "ROLLBACK": BASE_DIR / "dsp" / "rollback",
+    "CHECKPOINTS": BASE_DIR / "checkpoints",
+    "LOGS": BASE_DIR / "logs",
 }
 
 # Ensure directories exist upon initialization
@@ -61,3 +65,23 @@ FALLBACK_TARGETS = {
 # Genesis DDSP settings
 FFT_SIZES = [2048, 1024, 512, 256, 128, 64] # For Multi-Scale Spectral Loss
 HARMONIC_OSCILLATORS = 100
+
+
+# ==============================================================================
+# --- ADDED: Live Loop, Health, and MLOps Configuration ---
+# ==============================================================================
+
+# --- System Fallback & Rollback Policy ---
+# Ensures live audio never drops frames if VRAM spikes or a bake degrades audio
+BYPASS_ON_VRAM_SPIKE = os.getenv("FAURGE_BYPASS_ON_VRAM_SPIKE", "True").lower() == "true"
+ROLLBACK_RETENTION = int(os.getenv("FAURGE_ROLLBACK_RETENTION", 10)) # Keep last 10 plugin snapshots
+
+# --- Latency & Real-Time Constraints ---
+# Watchdog will force dry-bypass if processing exceeds this round-trip time
+MAX_LATENCY_MS = int(os.getenv("FAURGE_MAX_LATENCY_MS", 20))
+
+# --- API & Telemetry ---
+# Exposed ports for Prometheus scraping and GUI control endpoints
+HEALTH_HTTP_PORT = int(os.getenv("FAURGE_HEALTH_PORT", 8765))
+METRICS_PORT = int(os.getenv("FAURGE_METRICS_PORT", 8000))
+API_KEY = os.getenv("FAURGE_API_KEY", "") # Leave empty for local dev without auth

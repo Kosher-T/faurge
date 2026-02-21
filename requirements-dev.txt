@@ -1,0 +1,30 @@
+# ==========================================
+# Faurge - Development & Testing Environment
+# ==========================================
+
+# --- Testing & Mocking ---
+pytest>=7.4.0         # Core testing framework for the tests/ directory
+pytest-cov>=4.1.0     # Test coverage reporting
+pytest-mock>=3.11.1   # Crucial for mocking GPU/PipeWire states without hardware
+pytest-asyncio>=0.21.1 # For testing the asynchronous shadow buffer capture
+
+# --- Formatting & Linting ---
+black>=23.7.0         # Uncompromising code formatter
+ruff>=0.0.280         # Ultra-fast Python linter (replaces flake8/isort)
+mypy>=1.4.1           # Static type checking to catch routing errors early
+
+# --- Git Hooks ---
+pre-commit>=3.3.3     # Automates Black, Ruff, and Mypy before every git commit
+
+# --- Memory Profiling & Benchmarking ---
+# Critical for scripts/vram_budget.py and Phase 2 validation gates
+memory-profiler>=0.61.0 
+line-profiler>=4.0.3  
+psutil>=5.9.5         # Deep system monitoring for the test suite
+
+# --- MLOps & Data Versioning ---
+dvc>=3.15.0           # Data Version Control for datasets and audio assets
+mlflow>=2.5.0         # Local tracking for model checkpoints and training runs
+
+# --- Web API Testing ---
+httpx>=0.24.1         # Fast, modern HTTP client to test core/health_endpoints.py
