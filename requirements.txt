@@ -1,19 +1,23 @@
+# ==========================================
+# Faurge - Live Production Environment
+# ==========================================
+
 # --- Core AI & Deep Learning ---
-tensorflow>=2.15.0    # The foundation for Fabian, Ursula, and Genesis
+tensorflow>=2.15.0    # The foundation (Note: setup script will handle TF-ROCm for AMD)
 ddsp>=1.2.0           # Google Magenta's official Differentiable DSP library
-transformers>=4.30.0  # To load the CLAP model via Hugging Face's TF integration
+transformers>=4.30.0  # To load the CLAP model via Hugging Face
 tf-keras>=2.15.0      # For Ursula's Reinforcement Learning networks
 
 # --- Audio Feature Extraction & Math ---
 librosa>=0.10.0       # For STFT, LTAS calculation, ZCR, and Crest Factor
 soundfile>=0.12.1     # For reading/writing the 32-bit float IR .wav files
-pyloudnorm>=0.1.1     # The industry standard Python library for exact LUFS & LRA math
+pyloudnorm>=0.1.1     # ITU-R BS.1770-4 broadcast standard LUFS & LRA math
 
 # --- Reinforcement Learning (Ursula) ---
 gymnasium>=0.29.0     # The sandbox environment framework for Ursula's training
 
 # --- System & Hardware Interaction ---
-pynvml>=11.5.0        # NVIDIA Management Library wrapper for the VRAM Watchdog
+pynvml>=11.5.0        # NVIDIA Management Library (AMD uses native Linux sysfs)
 python-osc>=1.8.3     # Open Sound Control protocol to talk to the headless DSP plugins
 numpy>=1.24.0         # Matrix operations
 scipy>=1.10.1         # Scientific computing for the harmonic oscillators
