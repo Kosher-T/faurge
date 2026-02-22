@@ -2,4 +2,6 @@ venv/
 pytest_cache/
 
 *.env
+*.env.example
+*.log
 *.pyc
