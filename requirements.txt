@@ -3,21 +3,27 @@
 # ==========================================
 
 # --- Core AI & Deep Learning ---
-tensorflow>=2.15.0    # The foundation (Note: setup script will handle TF-ROCm for AMD)
-ddsp>=1.2.0           # Google Magenta's official Differentiable DSP library
-transformers>=4.30.0  # To load the CLAP model via Hugging Face
-tf-keras>=2.15.0      # For Ursula's Reinforcement Learning networks
+tensorflow>=2.15.0    
+ddsp>=1.2.0           
+transformers>=4.30.0  
+tf-keras>=2.15.0      
+
+# --- STRICT PYTHON 3.12 ANCHORS ---
+# These prevent pip from backtracking to 2020 audio dependencies
+numpy>=1.26.0
+scipy>=1.11.0
+numba>=0.59.0
+resampy>=0.4.0
+llvmlite>=0.42.0
 
 # --- Audio Feature Extraction & Math ---
-librosa>=0.10.0       # For STFT, LTAS calculation, ZCR, and Crest Factor
-soundfile>=0.12.1     # For reading/writing the 32-bit float IR .wav files
-pyloudnorm>=0.1.1     # ITU-R BS.1770-4 broadcast standard LUFS & LRA math
+librosa>=0.10.0       
+soundfile>=0.12.1     
+pyloudnorm>=0.1.1     
 
 # --- Reinforcement Learning (Ursula) ---
-gymnasium>=0.29.0     # The sandbox environment framework for Ursula's training
+gymnasium>=0.29.0     
 
 # --- System & Hardware Interaction ---
-pynvml>=11.5.0        # NVIDIA Management Library (AMD uses native Linux sysfs)
-python-osc>=1.8.3     # Open Sound Control protocol to talk to the headless DSP plugins
-numpy>=1.24.0         # Matrix operations
-scipy>=1.10.1         # Scientific computing for the harmonic oscillators
+pynvml>=11.5.0        
+python-osc>=1.8.3
