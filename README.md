@@ -65,7 +65,6 @@ Faurge is built for **Linux (Pop!_OS/Ubuntu)** using PipeWire.
 - PipeWire & WirePlumber
 - Python 3.10+
 - Standard headless LV2/LADSPA Plugins
-- NVIDIA GPU (For VRAM Watchdog features)
 
 ### Installation
 ```bash
