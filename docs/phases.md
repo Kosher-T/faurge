@@ -17,11 +17,11 @@ Before any AI wakes up, the system must establish bulletproof routing, hardware 
 - ~~**`core/logging.py`**: Structured, rotating logs for metrics and system states.~~
 
 ### Hardware & Audio Routing
-- **`core/watchdog.py` & `systemd/faurge-watchdog.service`**: The VRAM monitoring daemon running as a persistent, auto-restarting systemd service. Gracefully degrades on GPU-less systems.
-- **`core/hardware_detect.py`**: Probes for NVIDIA/AMD GPUs at startup. If none are found, forces Faurge into **CPU-only mode**, disabling VRAM monitoring and switching all tensor inference to CPU/OpenVINO.
-- **`core/shadow_capture.py`**: The asynchronous 5-second buffer recorder. Captures live audio into the Shadow Space for downstream agent analysis.
-- **`scripts/setup_pipewire.sh` & `scripts/reset_pipewire.sh`**: Establishes (and safely tears down) the virtual patch bay, hardwiring the live dry-bypass path.
-- **`scripts/setup_realtime_kernel.sh`**: Helper to configure low-latency kernels, `rtprio`, and PipeWire realtime permissions.
+- ~~**`core/watchdog.py` & `systemd/faurge-watchdog.service`**: The VRAM monitoring daemon running as a persistent, auto-restarting systemd service. Gracefully degrades on GPU-less systems.~~
+- ~~**`core/hardware_detect.py`**: Probes for NVIDIA/AMD GPUs at startup. If none are found, forces Faurge into **CPU-only mode**, disabling VRAM monitoring and switching all tensor inference to CPU/OpenVINO.~~
+- ~~**`core/shadow_capture.py`**: The asynchronous 5-second buffer recorder. Captures live audio into the Shadow Space for downstream agent analysis.~~
+- ~~**`scripts/setup_pipewire.sh` & `scripts/reset_pipewire.sh`**: Establishes (and safely tears down) the virtual patch bay, hardwiring the live dry-bypass path.~~
+- ~~**`scripts/setup_realtime_kernel.sh`**: Helper to configure low-latency kernels, `rtprio`, and PipeWire realtime permissions.~~
 
 ### Validation Gates & Health
 - **`scripts/validate_environment.py`**: Hard fails on missing dependencies, unsupported GPU drivers, or inadequate disk space.

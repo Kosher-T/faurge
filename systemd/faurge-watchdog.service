@@ -1,0 +1,34 @@
+[Unit]
+Description=Faurge VRAM Watchdog Daemon
+Documentation=https://github.com/itorousa/faurge
+After=network.target pipewire.service
+
+# Restart on failure, with a 5-second cooldown
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/faurge
+ExecStart=/opt/faurge/venv/bin/python -m core.watchdog
+Restart=on-failure
+RestartSec=5
+
+# Environment
+Environment="PATH=/opt/faurge/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=-/opt/faurge/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/faurge/logs /opt/faurge/state
+
+# Logging (goes to journald by default)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=faurge-watchdog
+
+[Install]
+WantedBy=default.target
