@@ -24,10 +24,10 @@ Before any AI wakes up, the system must establish bulletproof routing, hardware 
 - ~~**`scripts/setup_realtime_kernel.sh`**: Helper to configure low-latency kernels, `rtprio`, and PipeWire realtime permissions.~~
 
 ### Validation Gates & Health
-- **`scripts/validate_environment.py`**: Hard fails on missing dependencies, unsupported GPU drivers, or inadequate disk space.
-- **`scripts/pipewire_compat_check.py`**: Checks installed PipeWire/JACK versions against a known-stable compatibility matrix.
-- **`tests/test_pipewire_routing.py`**: Sends a known tone through the dry bypass to mathematically verify hardware-level passthrough.
-- **`core/health_endpoints.py`**: Exposes HTTP endpoints (`/health`, `/ready`, `/metrics`) to verify watchdog and audio server status.
+- ~~**`scripts/validate_environment.py`**: Hard fails on missing dependencies, unsupported GPU drivers, or inadequate disk space.~~
+- ~~**`scripts/pipewire_compat_check.py`**: Checks installed PipeWire/JACK versions against a known-stable compatibility matrix.~~
+- ~~**`tests/test_pipewire_routing.py`**: Sends a known tone through the dry bypass to mathematically verify hardware-level passthrough.~~
+- ~~**`core/health_endpoints.py`**: Exposes HTTP endpoints (`/health`, `/ready`, `/metrics`) to verify watchdog and audio server status.~~
 
 ---
 

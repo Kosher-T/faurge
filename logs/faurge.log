@@ -1,1 +1,18 @@
-{"timestamp": "2026-02-22 23:23:54,871", "level": "INFO", "logger": "test_json", "message": "Test JSON log entry"}
+{"timestamp": "2026-02-22 23:47:11,783", "level": "INFO", "logger": "test_json", "message": "Test JSON log entry"}
+{"timestamp": "2026-02-22 23:47:23,202", "level": "INFO", "logger": "faurge.hardware_detect", "message": "GPU detected: NVIDIA GeForce GTX 1650 (NVIDIA) \u2014 4096 MB VRAM"}
+{"timestamp": "2026-02-22 23:48:46,873", "level": "INFO", "logger": "faurge.health", "message": "Health server started on http://0.0.0.0:8765"}
+{"timestamp": "2026-02-22 23:48:47,494", "level": "INFO", "logger": "faurge.hardware_detect", "message": "GPU detected: NVIDIA GeForce GTX 1650 (NVIDIA) \u2014 4096 MB VRAM"}
+{"timestamp": "2026-02-22 23:48:47,506", "level": "INFO", "logger": "faurge.watchdog", "message": "VRAM Watchdog initialized for GPU: NVIDIA GeForce GTX 1650"}
+{"timestamp": "2026-02-22 23:48:47,507", "level": "INFO", "logger": "faurge.health", "message": "Health server stopped."}
+{"timestamp": "2026-02-22 23:49:52,967", "level": "INFO", "logger": "faurge.health", "message": "Health server started on http://0.0.0.0:8765"}
+{"timestamp": "2026-02-22 23:49:54,982", "level": "INFO", "logger": "faurge.hardware_detect", "message": "GPU detected: NVIDIA GeForce GTX 1650 (NVIDIA) \u2014 4096 MB VRAM"}
+{"timestamp": "2026-02-22 23:49:55,049", "level": "INFO", "logger": "faurge.watchdog", "message": "VRAM Watchdog initialized for GPU: NVIDIA GeForce GTX 1650"}
+{"timestamp": "2026-02-22 23:49:55,550", "level": "INFO", "logger": "faurge.health", "message": "Health server stopped."}
+{"timestamp": "2026-02-22 23:51:08,114", "level": "INFO", "logger": "faurge.health", "message": "Health server started on http://0.0.0.0:8766"}
+{"timestamp": "2026-02-22 23:51:08,726", "level": "INFO", "logger": "faurge.hardware_detect", "message": "GPU detected: NVIDIA GeForce GTX 1650 (NVIDIA) \u2014 4096 MB VRAM"}
+{"timestamp": "2026-02-22 23:51:08,737", "level": "INFO", "logger": "faurge.watchdog", "message": "VRAM Watchdog initialized for GPU: NVIDIA GeForce GTX 1650"}
+{"timestamp": "2026-02-22 23:51:08,738", "level": "INFO", "logger": "faurge.health", "message": "Health server stopped."}
+{"timestamp": "2026-02-22 23:51:57,798", "level": "INFO", "logger": "faurge.health", "message": "Health server started on http://0.0.0.0:8767"}
+{"timestamp": "2026-02-22 23:51:57,910", "level": "INFO", "logger": "faurge.hardware_detect", "message": "GPU detected: NVIDIA GeForce GTX 1650 (NVIDIA) \u2014 4096 MB VRAM"}
+{"timestamp": "2026-02-22 23:51:57,921", "level": "INFO", "logger": "faurge.watchdog", "message": "VRAM Watchdog initialized for GPU: NVIDIA GeForce GTX 1650"}
+{"timestamp": "2026-02-22 23:51:58,423", "level": "INFO", "logger": "faurge.health", "message": "Health server stopped."}
