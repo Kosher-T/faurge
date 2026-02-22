@@ -1,5 +1,7 @@
 # Faurge Development Roadmap: The Four Phases
 
+> **Development is currently for Linux OS only. Windows and MacOS versions coming soon.**
+
 This document outlines the chronological execution plan for building Faurge. To prevent architectural collapse, ensure maintainability, and respect the strict 4GB VRAM constraints of the deployment hardware, development is divided into four strictly ordered phases. We build the physical plumbing, testing infrastructure, and observability pipelines before we attempt to turn on the mathematical water.
 
 ---
