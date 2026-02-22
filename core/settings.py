@@ -2,10 +2,22 @@
 core/settings.py
 Global configuration for the Faurge pipeline.
 Acts as the single source of truth for all paths, hardware limits, and audio standards.
+Validates the loaded configuration against settings_schema_v1.json at startup.
 """
 
+import json
 import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+import jsonschema
+
+from core import defaults
+
+# --- Setup & Environment Loading ---
+# Load variables from .env if present. Existing env vars take precedence.
+# This must happen before we define our constants.
+load_dotenv()
 
 # --- Directory Structure ---
 # Anchors the paths to the root faurge/ directory
@@ -18,70 +30,121 @@ DIRS = {
     "DSP_PRESETS": BASE_DIR / "dsp" / "presets",
     "DATA": BASE_DIR / "data",
     "STATE": BASE_DIR / "state",
-    # --- Added: MLOps & System Directories ---
+    # MLOps & System Directories
     "ROLLBACK": BASE_DIR / "dsp" / "rollback",
     "CHECKPOINTS": BASE_DIR / "checkpoints",
     "LOGS": BASE_DIR / "logs",
 }
 
-# Ensure directories exist upon initialization
+# Ensure core runtime directories exist
 for path in DIRS.values():
     path.mkdir(parents=True, exist_ok=True)
 
 
-# --- Hardware & VRAM Watchdog Constraints ---
-# Configured for a strict 4GB VRAM limit
-GPU_TOTAL_VRAM_MB = 4096  
-VRAM_SAFETY_MARGIN_MB = 500  # Minimum free VRAM required before waking agents
-WATCHDOG_POLL_RATE_SEC = 2.0 # How often the pynvml daemon checks the GPU
+# --- Core Configuration Loader ---
+def _load_int(key: str, default: int) -> int:
+    return int(os.getenv(key, default))
 
+def _load_float(key: str, default: float) -> float:
+    return float(os.getenv(key, default))
+
+def _load_bool(key: str, default: bool) -> bool:
+    val = str(os.getenv(key, default)).lower()
+    return val in ('true', '1', 't', 'y', 'yes')
+
+def _load_str(key: str, default: str) -> str:
+    return os.getenv(key, default)
+
+
+# --- Hardware & VRAM Watchdog Constraints ---
+GPU_TOTAL_VRAM_MB = _load_int("FAURGE_GPU_TOTAL_VRAM_MB", defaults.GPU_TOTAL_VRAM_MB)
+VRAM_SAFETY_MARGIN_MB = _load_int("FAURGE_VRAM_SAFETY_MARGIN_MB", defaults.VRAM_SAFETY_MARGIN_MB)
+WATCHDOG_POLL_RATE_SEC = _load_float("FAURGE_WATCHDOG_POLL_RATE_SEC", defaults.WATCHDOG_POLL_RATE_SEC)
 
 # --- Audio & Shadow Space Configuration ---
-AUDIO_SAMPLE_RATE = 48000  # Standard for broadcast/video
-AUDIO_CHANNELS = 1         # Processing mono vocal inputs
-SHADOW_BUFFER_LENGTH_SEC = 5.0  # The length of the asynchronous capture
-
+AUDIO_SAMPLE_RATE = _load_int("FAURGE_AUDIO_SAMPLE_RATE", defaults.AUDIO_SAMPLE_RATE)
+AUDIO_CHANNELS = _load_int("FAURGE_AUDIO_CHANNELS", defaults.AUDIO_CHANNELS)
+SHADOW_BUFFER_LENGTH_SEC = _load_float("FAURGE_SHADOW_BUFFER_LENGTH_SEC", defaults.SHADOW_BUFFER_LENGTH_SEC)
 
 # --- DSP & PipeWire API Settings ---
-# Defaulting to standard local OSC ports for headless LV2/Carla manipulation
-DSP_OSC_IP = "127.0.0.1"
-DSP_OSC_PORT = 9000
-
-# Ursula's physical constraints to prevent catastrophic audio blowouts
-MAX_GAIN_DB = 15.0
-MIN_GAIN_DB = -24.0
-CLIP_THRESHOLD_DBFS = -0.5
-
+DSP_OSC_IP = _load_str("FAURGE_DSP_OSC_IP", defaults.DSP_OSC_IP)
+DSP_OSC_PORT = _load_int("FAURGE_DSP_OSC_PORT", defaults.DSP_OSC_PORT)
+MAX_GAIN_DB = _load_float("FAURGE_MAX_GAIN_DB", defaults.MAX_GAIN_DB)
+MIN_GAIN_DB = _load_float("FAURGE_MIN_GAIN_DB", defaults.MIN_GAIN_DB)
+CLIP_THRESHOLD_DBFS = _load_float("FAURGE_CLIP_THRESHOLD_DBFS", defaults.CLIP_THRESHOLD_DBFS)
 
 # --- Fallback / Baseline Metrics ---
-# If Fabian's routing fails or is bypassed, Ursula defaults to these physical targets
 FALLBACK_TARGETS = {
-    "LUFS": -16.0,          # Standard podcast/broadcast loudness
-    "LRA": 4.0,             # Tight dynamic range
-    "CREST_FACTOR": 3.5,    # Smooth, non-harsh transients
+    "LUFS": _load_float("FAURGE_FALLBACK_TARGETS_LUFS", defaults.FALLBACK_TARGETS_LUFS),
+    "LRA": _load_float("FAURGE_FALLBACK_TARGETS_LRA", defaults.FALLBACK_TARGETS_LRA),
+    "CREST_FACTOR": _load_float("FAURGE_FALLBACK_TARGETS_CREST_FACTOR", defaults.FALLBACK_TARGETS_CREST_FACTOR),
 }
 
 # --- Neural Network Training Hyperparameters ---
-# Genesis DDSP settings
-FFT_SIZES = [2048, 1024, 512, 256, 128, 64] # For Multi-Scale Spectral Loss
-HARMONIC_OSCILLATORS = 100
+# Currently fixed array per Phase 1 roadmap, but agent parameters are adjustable
+FFT_SIZES = [2048, 1024, 512, 256, 128, 64]
+HARMONIC_OSCILLATORS = _load_int("FAURGE_HARMONIC_OSCILLATORS", defaults.HARMONIC_OSCILLATORS)
 
-
-# ==============================================================================
-# --- ADDED: Live Loop, Health, and MLOps Configuration ---
-# ==============================================================================
-
-# --- System Fallback & Rollback Policy ---
-# Ensures live audio never drops frames if VRAM spikes or a bake degrades audio
-BYPASS_ON_VRAM_SPIKE = os.getenv("FAURGE_BYPASS_ON_VRAM_SPIKE", "True").lower() == "true"
-ROLLBACK_RETENTION = int(os.getenv("FAURGE_ROLLBACK_RETENTION", 10)) # Keep last 10 plugin snapshots
-
-# --- Latency & Real-Time Constraints ---
-# Watchdog will force dry-bypass if processing exceeds this round-trip time
-MAX_LATENCY_MS = int(os.getenv("FAURGE_MAX_LATENCY_MS", 20))
+# --- Live Loop & MLOps ---
+BYPASS_ON_VRAM_SPIKE = _load_bool("FAURGE_BYPASS_ON_VRAM_SPIKE", defaults.BYPASS_ON_VRAM_SPIKE)
+ROLLBACK_RETENTION = _load_int("FAURGE_ROLLBACK_RETENTION", defaults.ROLLBACK_RETENTION)
+MAX_LATENCY_MS = _load_int("FAURGE_MAX_LATENCY_MS", defaults.MAX_LATENCY_MS)
 
 # --- API & Telemetry ---
-# Exposed ports for Prometheus scraping and GUI control endpoints
-HEALTH_HTTP_PORT = int(os.getenv("FAURGE_HEALTH_PORT", 8765))
-METRICS_PORT = int(os.getenv("FAURGE_METRICS_PORT", 8000))
-API_KEY = os.getenv("FAURGE_API_KEY", "") # Leave empty for local dev without auth
+HEALTH_HTTP_PORT = _load_int("FAURGE_HEALTH_PORT", defaults.HEALTH_HTTP_PORT)
+METRICS_PORT = _load_int("FAURGE_METRICS_PORT", defaults.METRICS_PORT)
+API_KEY = _load_str("FAURGE_API_KEY", defaults.API_KEY)
+
+# --- Logging ---
+LOG_LEVEL = _load_str("FAURGE_LOG_LEVEL", defaults.LOG_LEVEL)
+LOG_MAX_BYTES = _load_int("FAURGE_LOG_MAX_BYTES", defaults.LOG_MAX_BYTES)
+LOG_BACKUP_COUNT = _load_int("FAURGE_LOG_BACKUP_COUNT", defaults.LOG_BACKUP_COUNT)
+
+
+# ==============================================================================
+# --- Configuration Validation ---
+# ==============================================================================
+
+def validate_settings():
+    """Validates the current settings against the JSON Schema."""
+    schema_path = BASE_DIR / "core" / "schemas" / "settings_schema_v1.json"
+    if not schema_path.exists():
+        # Fallback for tests or missing schema files
+        return
+
+    with open(schema_path, "r") as f:
+        schema = json.load(f)
+
+    # Build a snapshot of the current flat variables for validation
+    config_snapshot = {
+        "GPU_TOTAL_VRAM_MB": GPU_TOTAL_VRAM_MB,
+        "VRAM_SAFETY_MARGIN_MB": VRAM_SAFETY_MARGIN_MB,
+        "WATCHDOG_POLL_RATE_SEC": WATCHDOG_POLL_RATE_SEC,
+        "AUDIO_SAMPLE_RATE": AUDIO_SAMPLE_RATE,
+        "AUDIO_CHANNELS": AUDIO_CHANNELS,
+        "SHADOW_BUFFER_LENGTH_SEC": SHADOW_BUFFER_LENGTH_SEC,
+        "DSP_OSC_IP": DSP_OSC_IP,
+        "DSP_OSC_PORT": DSP_OSC_PORT,
+        "MAX_GAIN_DB": MAX_GAIN_DB,
+        "MIN_GAIN_DB": MIN_GAIN_DB,
+        "CLIP_THRESHOLD_DBFS": CLIP_THRESHOLD_DBFS,
+        "FALLBACK_TARGETS": FALLBACK_TARGETS,
+        "FFT_SIZES": FFT_SIZES,
+        "HARMONIC_OSCILLATORS": HARMONIC_OSCILLATORS,
+        "BYPASS_ON_VRAM_SPIKE": BYPASS_ON_VRAM_SPIKE,
+        "ROLLBACK_RETENTION": ROLLBACK_RETENTION,
+        "MAX_LATENCY_MS": MAX_LATENCY_MS,
+        "HEALTH_HTTP_PORT": HEALTH_HTTP_PORT,
+        "METRICS_PORT": METRICS_PORT,
+        "LOG_LEVEL": LOG_LEVEL,
+        "LOG_MAX_BYTES": LOG_MAX_BYTES,
+        "LOG_BACKUP_COUNT": LOG_BACKUP_COUNT,
+    }
+
+    try:
+        jsonschema.validate(instance=config_snapshot, schema=schema)
+    except jsonschema.exceptions.ValidationError as e:
+        raise RuntimeError(f"Faurge Configuration Error: {e.message}") from e
+
+# Validate on import
+validate_settings()

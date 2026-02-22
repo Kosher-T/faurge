@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Faurge Settings Schema",
+  "description": "Validation constraints for Faurge core settings",
+  "type": "object",
+  "properties": {
+    "GPU_TOTAL_VRAM_MB": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 8192
+    },
+    "VRAM_SAFETY_MARGIN_MB": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 2048
+    },
+    "WATCHDOG_POLL_RATE_SEC": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 60.0
+    },
+    "AUDIO_SAMPLE_RATE": {
+      "type": "integer",
+      "enum": [44100, 48000, 96000]
+    },
+    "AUDIO_CHANNELS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "SHADOW_BUFFER_LENGTH_SEC": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 30.0
+    },
+    "DSP_OSC_IP": {
+      "type": "string",
+      "format": "ipv4"
+    },
+    "DSP_OSC_PORT": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "MAX_GAIN_DB": {
+      "type": "number"
+    },
+    "MIN_GAIN_DB": {
+      "type": "number"
+    },
+    "CLIP_THRESHOLD_DBFS": {
+      "type": "number"
+    },
+    "FALLBACK_TARGETS": {
+      "type": "object",
+      "properties": {
+        "LUFS": {"type": "number"},
+        "LRA": {"type": "number"},
+        "CREST_FACTOR": {"type": "number"}
+      },
+      "required": ["LUFS", "LRA", "CREST_FACTOR"]
+    },
+    "FFT_SIZES": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 1
+    },
+    "HARMONIC_OSCILLATORS": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "BYPASS_ON_VRAM_SPIKE": {
+      "type": "boolean"
+    },
+    "ROLLBACK_RETENTION": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "MAX_LATENCY_MS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "HEALTH_HTTP_PORT": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "METRICS_PORT": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "LOG_LEVEL": {
+      "type": "string",
+      "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    },
+    "LOG_MAX_BYTES": {
+      "type": "integer",
+      "minimum": 1024
+    },
+    "LOG_BACKUP_COUNT": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "GPU_TOTAL_VRAM_MB",
+    "VRAM_SAFETY_MARGIN_MB",
+    "AUDIO_SAMPLE_RATE",
+    "SHADOW_BUFFER_LENGTH_SEC",
+    "DSP_OSC_PORT"
+  ]
+}

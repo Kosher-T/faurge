@@ -25,5 +25,9 @@ pyloudnorm>=0.1.1
 gymnasium>=0.29.0     
 
 # --- System & Hardware Interaction ---
-pynvml>=11.5.0        
-python-osc>=1.8.3
+pynvml>=11.5.0        # NVIDIA Management Library (AMD uses native Linux sysfs)
+python-osc>=1.8.3     # Open Sound Control protocol to talk to the headless DSP plugins
+numpy>=1.24.0         # Matrix operations
+scipy>=1.10.1         # Scientific computing for the harmonic oscillators
+python-dotenv>=1.0.0  # Environment variable loading
+jsonschema>=4.17.0    # Configuration validation>=1.8.3
