@@ -10,9 +10,9 @@ Before any AI wakes up, the system must establish bulletproof routing, hardware 
 
 ### Core Architecture & Config
 - ~~**`requirements.txt` & `requirements-dev.txt`**: Strict separation of runtime dependencies and development tools.~~
-- **`core/settings.py` & `core/defaults.py`**: Global configuration loaded via env vars, enforcing absolute limits (e.g., `VRAM_LIMIT_GB=3.6`, `MAX_LATENCY_MS=20`).
-- **`core/schemas/settings_schema_v1.json`**: JSON Schema to validate settings, paired with `.env.example` for secure deployment.
-- **`core/logging.py`**: Structured, rotating logs for metrics and system states.
+- ~~**`core/settings.py` & `core/defaults.py`**: Global configuration loaded via env vars, enforcing absolute limits (e.g., `VRAM_LIMIT_GB=3.6`, `MAX_LATENCY_MS=20`).~~
+- ~~**`core/schemas/settings_schema_v1.json`**: JSON Schema to validate settings, paired with `.env.example` for secure deployment.~~
+- ~~**`core/logging.py`**: Structured, rotating logs for metrics and system states.~~
 
 ### Hardware & Audio Routing
 - **`core/watchdog.py` & `systemd/faurge-watchdog.service`**: The VRAM monitoring daemon running as a persistent, auto-restarting systemd service. Gracefully degrades on GPU-less systems.
