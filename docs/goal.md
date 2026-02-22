@@ -1,5 +1,7 @@
 # Faurge: The Generative Acoustic Reality Engine
 
+> **Development is currently for Linux OS only. Windows and MacOS versions coming soon.**
+
 ## Overview
 Faurge is a high-performance, agentic AI suite designed to transform raw audio signals into idealized acoustic states. Built on a "Split-Brain" architecture, Faurge bridges the gap between complex neural reasoning and low-latency digital signal processing (DSP). It functions as a software-defined vocal tract and acoustic environment, capable of correcting hardware deficiencies, neutralizing room acoustics, and synthesizing professional-grade audio textures.
 

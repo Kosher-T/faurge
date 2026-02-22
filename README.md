@@ -1,5 +1,7 @@
 # Faurge ⚒️
 
+> **Development is currently for Linux OS only. Windows and MacOS versions coming soon.**
+
 **Faurge** (Forge + Audio) is an agentic AI engine designed to "hammer" raw audio into professional-grade, idealized sound. Operating in real-time between your hardware and your applications, Faurge functions as an AI-powered mixing engineer, room corrector, and acoustic architect.
 
 ## 🏗 Architecture & Hardware Awareness
