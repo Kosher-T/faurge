@@ -40,65 +40,59 @@ This phase enforces a strict VRAM budget audit before any model weights are writ
 - ~~**`core/memory_tracker.py`**: Detailed peak/per-layer memory profiling to debug budget overruns. Supports both VRAM (pynvml) and system RAM tracking.~~
 - ~~**`tests/test_vram_budget.py`**: Validates the budget logic using mock models, including the CPU-only fallback path.~~
 
-### Dataset Preparation & Governance
-- **`dvc.yaml` & `data/dataset_config.yaml`**: Uses DVC for dataset versioning, preventing hardcoded paths and storing checksums/provenance.
-- **`scripts/download_datasets.py` & `scripts/prepare_dataset_ci.sh`**: Automates acquisition with resume support, and generates tiny subsets for CI testing.
-- **`scripts/augment_dataset.py` & `scripts/generate_dataset.py`**: Convolves dry vocals with IRs, injecting noise and pitch shifts to harden Genesis's robustness.
-- **`scripts/generate_physical_labels.py`**: Iterates audio files to calculate ground-truth LTAS, LUFS, LRA, and Crest Factor values. Prerequisite for Fabian's Physical Regression Head training.
-- **`scripts/validate_dataset.py` & `tests/test_dataset_license.py`**: Post-generation checks ensuring all files are valid, physical labels are accurate, and legal licenses are compliant.
+### Cloud Dataset Preparation (Kaggle Environment)
+*All files here live in the local `kaggle/` directory but are executed in the cloud.*
+- **`kaggle/01_acquire_and_augment.ipynb`**: Downloads VCTK/LibriSpeech directly to Kaggle's high-speed storage. Convolves dry vocals with IRs and injects noise.
+- **`kaggle/02_generate_physical_labels.ipynb`**: Iterates cloud audio files to calculate ground-truth LTAS, LUFS, LRA, and Crest Factor values for Fabian's training.
+- **`kaggle/dataset_manifest.json`**: A lightweight manifest generated in the cloud, tracking checksums. Tracked locally by Git to monitor dataset versions without downloading the 40GB audio files.
+- **`scripts/validate_manifest.py`**: Local script that asserts the Git-tracked manifest is well-formed, contains expected checksums, and the dataset version hasn't drifted. Strengthens the Phase 2 → 3 gate.
 
-### Pretrained Model Acquisition
-- **`scripts/download_pretrained.py`**: Downloads and hash-verifies frozen backbone weights (CLAP encoder, etc.) into `models/`. Must pass before Phase 3 training begins.
+### Cloud Model Acquisition & Freezing (Kaggle Environment)
+- **`kaggle/03_freeze_and_export_backbones.ipynb`**: Downloads the massive CLAP text/audio encoders to Kaggle. Strips out unnecessary training layers, freezes the weights, and packages them into a compressed `.tar.gz` archive for low-bandwidth local downloading.
 
-### Sandbox & Optimization
-- **`core/gym_env.py` & `gym_env/test_env.py`**: Ursula's offline DSP simulator and its sanity checks. Depends on `scripts/setup_pipewire.sh` having validated a headless PipeWire/LV2 host.
-- **`scripts/quantize_models.py`**: Post-training float16/INT8 quantization tools to drastically reduce VRAM footprints. Also exports CPU-optimized ONNX/OpenVINO variants.
-
----
-
-## Phase 3: The Cognitive Layer (Agent Architecture & Training)
-
-With data locked and VRAM secured, we build the tensor networks. All checkpoints are treated as immutable artifacts.
-
-### Agent Blueprints
-- **`config/hyperparameters.yaml`**: The single source of truth for all learning rates, network dimensions, and batch sizes.
-- **`agents/base_agent.py`**: Abstract base class (load, save, predict, reset) to standardize agent API.
-- **`agents/fabian.py`, `agents/ursula.py`, `agents/genesis.py`**: The core AI logic (Split-Router, SAC Tuner, DDSP Synthesizer).
-- **`agents/compat_matrix.md`**: Documents agent behavior across float16/quantized/ONNX variants.
-
-### Training & Orchestration
-- **`training/train_all.py`**: Meta-script orchestrating the sequential training runs (Fabian → Ursula → Genesis).
-- **`training/train_fabian.py`**: Freezes the CLAP text encoder and trains the Routing Head and Physical Regression Head MLPs on generated physical labels.
-- **`training/tensorboard_logging.py` & `training/early_stopping.py`**: Universal loss curve tracking and overfitting prevention.
-- **`mlflow/` (Model Registry)**: Documents promoted checkpoints, signature metadata, and deterministic commit SHAs.
-- **`scripts/export_onnx.py` & `scripts/export_tflite.py`**: Inference optimization pipelines. Includes CPU-only export targets (ONNX Runtime / OpenVINO).
-
-### Validation Gates & QA
-- **`scripts/qa_metrics.py`**: Computes objective audio metrics (SI-SDR, STOI) to detect model regressions.
-- **`tests/test_model_loading.py` & `tests/test_deterministic_repro.py`**: Verifies checkpoints load under budget and reproduce exact outputs given fixed RNG seeds.
-- **`tests/test_cng_output.py`**: Validates Genesis's Comfort Noise Generator outputs (LFO rates, bandpass cutoffs, pink-noise amplitudes) have correct shapes and sane value ranges.
+### Local Artifact Ingestion
+- **`scripts/ingest_cloud_artifacts.py`**: A local script designed to cleanly unpack the frozen models downloaded from Kaggle into the local `models/` directory, verifying their SHA256 hashes before allowing Phase 3 to run.
 
 ---
 
-## Phase 4: The Live Loop (Orchestration & Execution)
+## Phase 3: The Cognitive Layer (Cloud Training & Offline Sandbox)
 
-The final phase glues the trained networks to the PipeWire infrastructure with extreme fault tolerance.
+We build and train the tensor networks in the cloud. Checkpoints are optimized, quantized, and exported as immutable artifacts for the edge device.
+
+### Agent Blueprints (Local & Cloud Shared)
+- **`config/hyperparameters.yaml`**: The single source of truth for learning rates and network dimensions.
+- **`agents/base_agent.py`, `fabian.py`, `ursula.py`, `genesis.py`**: The core AI logic. These files are pushed to Kaggle via GitHub for training, but execute locally during live inference.
+
+### Ursula's Offline Sandbox
+- **`core/gym_env.py`**: Ursula's DSP simulator. 
+  - *Note for Kaggle:* Since Kaggle does not have PipeWire, this environment will use a Python-native DSP library (like `pedalboard` or headless `pysndfx`) to simulate EQ and Compression during cloud training.
+
+### Cloud Training Orchestration (Kaggle Environment)
+- **`kaggle/requirements-kaggle.txt`**: Cloud-specific dependencies (`pedalboard`, `pyloudnorm`, audio libs) `pip install`-ed at the top of each notebook.
+- **`kaggle/04_train_fabian.ipynb`**: Trains the Routing and Physical Regression heads using the cloud-generated labels.
+- **`kaggle/05_train_ursula.ipynb`**: Runs the Soft Actor-Critic RL loop inside the headless Python DSP simulator.
+- **`kaggle/06_train_genesis.ipynb`**: Trains the DDSP synthesizer against real-world IRs.
+- **`kaggle/07_quantize_and_export.ipynb`**: Runs post-training float16/INT8 quantization on the final models. Exports them as lightweight ONNX/TFLite weights, ready to be zipped and downloaded to the local edge machine.
+
+---
+
+## Phase 4: The Live Loop (Local Orchestration & Execution)
+
+The final phase glues the trained networks (downloaded from Kaggle) to the local PipeWire infrastructure with extreme fault tolerance.
 
 ### Core Execution & Safety
-- **`faurge.py` & `systemd/faurge-main.service`**: The root execution daemon. Detects CPU-only mode at startup and configures the pipeline accordingly.
-- **`core/bake_orchestrator.py`**: The sequential Fabian → Ursula → Genesis pipeline. Wakes agents, runs inference, writes IRs/CNG seeds to disk, and guarantees full VRAM unload after each bake cycle.
-- **`core/audio_processor.py` & `core/state_manager.py`**: Encapsulates real-time processing, buffer math, and the global bypass/active state machine. Implements smooth cross-fade logic to hot-swap baked IRs without audible pops.
-- **`core/signal_handlers.py` & `core/kill_switch.py`**: Ensures graceful teardowns and provides a "panic" CLI/GPIO hook for instant hardware bypass.
+- **`faurge.py` & `systemd/faurge-main.service`**: The root execution daemon. 
+- **`core/bake_orchestrator.py`**: The sequential Fabian → Ursula → Genesis pipeline. Wakes agents, runs inference, writes IRs to disk, and guarantees full VRAM unload.
+- **`core/audio_processor.py` & `core/state_manager.py`**: Encapsulates real-time processing, buffer math, and smooth cross-fade logic for hot-swapping baked IRs.
+- **`core/signal_handlers.py` & `core/kill_switch.py`**: Ensures graceful teardowns and provides an instant hardware bypass.
 
-### Monitoring, API, & Rollout
-- **`web_api/app.py`**: API-key secured server exposing status metrics, bypass controls, and A/B testing over HTTP.
-- **`monitoring/prometheus_exporter.py` & `monitoring/trace_alerts.md`**: Exports VRAM usage and bypass states, defining hard alert thresholds.
-- **`scripts/canary_deploy.sh`**: Safely loads new checkpoints to a secondary process for A/B audio testing before full promotion.
-- **`core/baker.py` & `scripts/backup_rollback_policy.sh`**: Writes IRs to disk, manages automated rollback snapshots, and enforces retention policies (e.g., keep last 10 bakes).
+### Monitoring & Rollout
+- **`web_api/app.py`**: API-key secured server exposing status metrics and bypass controls.
+- **`core/baker.py` & `scripts/backup_rollback_policy.sh`**: Writes IRs to disk and manages automated rollback snapshots.
 
-### Validation Gates
-- **`tests/test_live_loop.py` & `tests/test_latency_under_load.py`**: End-to-end simulations validating bypass fallback under massive GPU spikes while maintaining <20ms latency.
-- **`tests/regression/`**: Nightly CI suite comparing new model outputs against reference audio to catch drift.
+### Local Validation Gates
+- **`tests/test_live_loop.py`**: End-to-end simulations validating bypass fallback under massive GPU spikes and asserting <20ms latency under load.
+- **`tests/test_vram_unload.py`**: Asserts GPU memory returns to baseline after a complete local bake cycle.
 
 ---
 
@@ -106,21 +100,16 @@ The final phase glues the trained networks to the PipeWire infrastructure with e
 
 - **CI/CD (`.github/workflows/ci.yml`)**: Matrix testing (GPU + CPU-only), caching, and simulated VRAM-budget checks on every push.
 - **CPU-Only Deployment**: All agents and the bake pipeline must function without a GPU. CI includes a dedicated CPU-only matrix leg to catch regressions.
-- **Developer Experience**: `devcontainer/` config, Black formatting, Ruff linting, and Mypy type safety via pre-commit hooks.
-- **Observability**: OpenTelemetry tracing for critical asynchronous paths.
-- **Legal & Privacy**: `docs/privacy.md` (telemetry notice, audio capture retention) and `legal/dataset_licenses.md`.
-- **Release Management**: `RELEASE.md` outlining semantic versioning for both code and weights.
-- **Auditability**: Every generated DSP bake produces an immutable manifest (SHA256 of model, timestamp, rollback pointer).
+- **Developer Experience**: Black formatting, Ruff linting, and Mypy type safety via pre-commit hooks.
 - **VRAM Lifecycle**: `tests/test_vram_unload.py` asserts GPU memory returns to baseline after a complete bake cycle. Skipped in CPU-only mode.
 
 ---
 
 ## Mandatory Phase Gates
-No phase begins until the previous phase's gate condition is met.
 
 | Gate | Condition |
 |------|-----------|
-| Phase 1 → 2 | `test_pipewire_routing.py` cleanly exits; hardware dry bypass is confirmed; `hardware_detect.py` sets GPU or CPU-only mode. |
-| Phase 2 → 3 | `vram_budget.py` completes without exceeding the safety margin (or RAM budget in CPU-only mode). All datasets pass `validate_dataset.py`. Pretrained weights are hash-verified. |
-| Phase 3 → 4 | Objective `qa_metrics.py` pass; checkpoints are registered in MLflow; `test_cng_output.py` passes. |
-| Live Bake | Immutable bake manifest and rollback snapshot are committed. `test_vram_unload.py` confirms clean teardown. |
+| Phase 1 → 2 | `test_pipewire_routing.py` cleanly exits; hardware dry bypass is confirmed. |
+| Phase 2 → 3 | VRAM budget audited locally. `validate_manifest.py` passes. Frozen backbones securely downloaded to edge device. |
+| Phase 3 → 4 | Kaggle training completes. Quantized models downloaded and pass local SHA256 verification. |
+| Live Bake | Immutable bake manifest committed. `test_vram_unload.py` confirms clean teardown. |
