@@ -42,7 +42,7 @@ This phase enforces a strict VRAM budget audit before any model weights are writ
 
 ### Cloud Dataset Preparation (Kaggle Environment)
 *All files here live in the local `kaggle/` directory but are executed in the cloud.*
-- **`kaggle/01_acquire_and_augment.ipynb`**: Downloads VCTK/LibriSpeech directly to Kaggle's high-speed storage. Convolves dry vocals with IRs and injects noise.
+- **`kaggle/01_acquire_and_augment.ipynb`**: Downloads VCTK/LJSpeech directly to Kaggle's high-speed storage. Convolves dry vocals with IRs and injects noise.
 - **`kaggle/02_generate_physical_labels.ipynb`**: Iterates cloud audio files to calculate ground-truth LTAS, LUFS, LRA, and Crest Factor values for Fabian's training.
 - **`kaggle/dataset_manifest.json`**: A lightweight manifest generated in the cloud, tracking checksums. Tracked locally by Git to monitor dataset versions without downloading the 40GB audio files.
 - **`scripts/validate_manifest.py`**: Local script that asserts the Git-tracked manifest is well-formed, contains expected checksums, and the dataset version hasn't drifted. Strengthens the Phase 2 → 3 gate.

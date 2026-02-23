@@ -60,12 +60,12 @@ The DDSP Decoder translates $H'$ into literal, frame-by-frame parameters for two
 2. **Procedural Comfort Noise Generation (CNG):** If Fabian's vector implies background ambiance, Genesis does not output an audio file (which would loop and sound obvious). Instead, she outputs continuous mathematical seeds—LFO rates, bandpass cutoffs, and pink-noise amplitudes. This synthesizes infinite, non-repeating room tone beneath the primary signal.
 
 ### 5. Training Data and Methodology
-Because Genesis is translating abstract vectors into hard physics via FiLM, her weights will be completely random at first. She will output screeching noise until I train her. 
+Because Genesis is translating abstract vectors into hard physics via FiLM, her weights will be completely random at first. She will output screeching noise until I train her.
 
 **The Datasets I'll Use:**
 * **LAION-Audio-630K & AudioCaps:** I will use the text-to-audio pairs to establish the CLAP vectors.
 * **MIT Acoustical Reverberation Scene Statistics (or OpenAir):** I will pull a massive corpus of real-world Impulse Responses from these libraries.
-* **VCTK / LibriSpeech:** I'll use these as my foundation of high-fidelity, completely dry studio vocals.
+* **VCTK / LJSpeech:** I'll use these as my foundation of high-fidelity, completely dry studio vocals.
 
 **How I Will Train Her (The Synthetic Pairing Loop):**
 Genesis's training data must be synthetically constructed by me, because natural datasets do not contain the isolated variables she needs to learn. Here is exactly how I'll build her training ground:
