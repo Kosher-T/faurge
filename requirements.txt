@@ -26,6 +26,7 @@ gymnasium>=0.29.0
 
 # --- System & Hardware Interaction ---
 pynvml>=11.5.0        # NVIDIA Management Library (AMD uses native Linux sysfs)
+psutil>=5.9.0         # Cross-platform system/process memory tracking
 python-osc>=1.8.3     # Open Sound Control protocol to talk to the headless DSP plugins
 numpy>=1.24.0         # Matrix operations
 scipy>=1.10.1         # Scientific computing for the harmonic oscillators

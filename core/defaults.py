@@ -45,3 +45,10 @@ API_KEY = ""
 LOG_LEVEL = "INFO"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 LOG_BACKUP_COUNT = 5
+
+# --- Phase 2: Memory & Budget Enforcement ---
+VRAM_BUDGET_LIMIT_MB = 3900       # Hard peak-VRAM ceiling (≈ 3.9 GB)
+RAM_BUDGET_LIMIT_MB = 4096        # CPU-only RAM ceiling
+BUDGET_INFERENCE_STEPS = 5        # Inference steps during profiling
+BUDGET_WARMUP_STEPS = 2           # Warmup steps before measurement
+BUDGET_ABORT_ON_EXCEED = True     # Halt the build on budget overrun

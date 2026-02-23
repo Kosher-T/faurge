@@ -100,6 +100,13 @@ LOG_LEVEL = _load_str("FAURGE_LOG_LEVEL", defaults.LOG_LEVEL)
 LOG_MAX_BYTES = _load_int("FAURGE_LOG_MAX_BYTES", defaults.LOG_MAX_BYTES)
 LOG_BACKUP_COUNT = _load_int("FAURGE_LOG_BACKUP_COUNT", defaults.LOG_BACKUP_COUNT)
 
+# --- Phase 2: Memory & Budget Enforcement ---
+VRAM_BUDGET_LIMIT_MB = _load_int("FAURGE_VRAM_BUDGET_LIMIT_MB", defaults.VRAM_BUDGET_LIMIT_MB)
+RAM_BUDGET_LIMIT_MB = _load_int("FAURGE_RAM_BUDGET_LIMIT_MB", defaults.RAM_BUDGET_LIMIT_MB)
+BUDGET_INFERENCE_STEPS = _load_int("FAURGE_BUDGET_INFERENCE_STEPS", defaults.BUDGET_INFERENCE_STEPS)
+BUDGET_WARMUP_STEPS = _load_int("FAURGE_BUDGET_WARMUP_STEPS", defaults.BUDGET_WARMUP_STEPS)
+BUDGET_ABORT_ON_EXCEED = _load_bool("FAURGE_BUDGET_ABORT_ON_EXCEED", defaults.BUDGET_ABORT_ON_EXCEED)
+
 
 # ==============================================================================
 # --- Configuration Validation ---
@@ -139,6 +146,11 @@ def validate_settings():
         "LOG_LEVEL": LOG_LEVEL,
         "LOG_MAX_BYTES": LOG_MAX_BYTES,
         "LOG_BACKUP_COUNT": LOG_BACKUP_COUNT,
+        "VRAM_BUDGET_LIMIT_MB": VRAM_BUDGET_LIMIT_MB,
+        "RAM_BUDGET_LIMIT_MB": RAM_BUDGET_LIMIT_MB,
+        "BUDGET_INFERENCE_STEPS": BUDGET_INFERENCE_STEPS,
+        "BUDGET_WARMUP_STEPS": BUDGET_WARMUP_STEPS,
+        "BUDGET_ABORT_ON_EXCEED": BUDGET_ABORT_ON_EXCEED,
     }
 
     try:

@@ -36,9 +36,9 @@ Before any AI wakes up, the system must establish bulletproof routing, hardware 
 This phase enforces a strict VRAM budget audit before any model weights are written, and establishes the immutable datasets for training.
 
 ### Memory & Budget Enforcement
-- **`core/vram_policy.py` & `scripts/vram_budget.py`**: Loads models, runs a short inference loop to profile memory fragmentation, and halts the build if peak VRAM exceeds the safety margin (≥ 3.9GB). In CPU-only mode, the VRAM audit is skipped and RAM budget limits are enforced instead.
-- **`core/memory_tracker.py`**: Detailed peak/per-layer memory profiling to debug budget overruns. Supports both VRAM (pynvml) and system RAM tracking.
-- **`tests/test_vram_budget.py`**: Validates the budget logic using mock models, including the CPU-only fallback path.
+- ~~**`core/vram_policy.py` & `scripts/vram_budget.py`**: Loads models, runs a short inference loop to profile memory fragmentation, and halts the build if peak VRAM exceeds the safety margin (≥ 3.9GB). In CPU-only mode, the VRAM audit is skipped and RAM budget limits are enforced instead.~~
+- ~~**`core/memory_tracker.py`**: Detailed peak/per-layer memory profiling to debug budget overruns. Supports both VRAM (pynvml) and system RAM tracking.~~
+- ~~**`tests/test_vram_budget.py`**: Validates the budget logic using mock models, including the CPU-only fallback path.~~
 
 ### Dataset Preparation & Governance
 - **`dvc.yaml` & `data/dataset_config.yaml`**: Uses DVC for dataset versioning, preventing hardcoded paths and storing checksums/provenance.

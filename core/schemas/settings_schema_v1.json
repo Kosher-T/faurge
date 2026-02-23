@@ -105,6 +105,29 @@
     "LOG_BACKUP_COUNT": {
       "type": "integer",
       "minimum": 0
+    },
+    "VRAM_BUDGET_LIMIT_MB": {
+      "type": "integer",
+      "minimum": 512,
+      "maximum": 16384
+    },
+    "RAM_BUDGET_LIMIT_MB": {
+      "type": "integer",
+      "minimum": 512,
+      "maximum": 65536
+    },
+    "BUDGET_INFERENCE_STEPS": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "BUDGET_WARMUP_STEPS": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 50
+    },
+    "BUDGET_ABORT_ON_EXCEED": {
+      "type": "boolean"
     }
   },
   "required": [

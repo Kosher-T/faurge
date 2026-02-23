@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-02-23T03:32:08+0100",
+  "elapsed_sec": 1.64,
+  "report": {
+    "mode": "gpu",
+    "peak_mb": 424.5,
+    "baseline_mb": 424.5,
+    "snapshot_count": 6,
+    "snapshots": [
+      {
+        "label": "baseline",
+        "used_mb": 424.5
+      },
+      {
+        "label": "inference_step_0",
+        "used_mb": 424.5
+      },
+      {
+        "label": "inference_step_1",
+        "used_mb": 424.5
+      },
+      {
+        "label": "inference_step_2",
+        "used_mb": 424.5
+      },
+      {
+        "label": "inference_step_3",
+        "used_mb": 424.5
+      },
+      {
+        "label": "inference_step_4",
+        "used_mb": 424.5
+      }
+    ],
+    "layers": [
+      {
+        "name": "synthetic_model_load",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "warmup_0",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "warmup_1",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "inference_0",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "inference_1",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "inference_2",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "inference_3",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      },
+      {
+        "name": "inference_4",
+        "before_mb": 424.5,
+        "after_mb": 424.5,
+        "delta_mb": 0.0
+      }
+    ]
+  },
+  "result": {
+    "passed": true,
+    "peak_mb": 424.5,
+    "limit_mb": 3900.0,
+    "headroom_mb": 3475.5,
+    "overrun_mb": 0.0,
+    "mode": "gpu",
+    "summary": "PASS \u2014 peak 424.5 MB within 3900 MB limit (3475.5 MB headroom)"
+  }
+}
