@@ -131,7 +131,7 @@ nb.cells.append(nbf.v4.new_code_cell("""\
 CHECKPOINT_PATH = OUTPUT / 'checkpoint.json'
 
 def load_checkpoint() -> dict:
-    \\"\\"\\"Load checkpoint: previous run → current working dir → fresh start.\\"\\"\\"
+    \"\"\"Load checkpoint: previous run → current working dir → fresh start.\"\"\"
     # 1) Check previous run first (chaining)
     prev_ckpt = PREV_RUN_PATH / 'checkpoint.json'
     if prev_ckpt.exists():
@@ -160,7 +160,7 @@ def save_checkpoint(ckpt: dict):
         json.dump(ckpt, f, indent=2)
 
 def get_output_size_gb() -> float:
-    \\"\\"\\"Calculate the exact size of /kaggle/working in GB.\\"\\"\\"
+    \"\"\"Calculate the exact size of /kaggle/working in GB.\"\"\"
     total = sum(f.stat().st_size for f in OUTPUT.rglob('*') if f.is_file())
     return total / (1024 ** 3)
 
@@ -225,7 +225,7 @@ else:
 
     # ─── Stage 2: Load & normalize every IR to 48 kHz mono ───────────
     def load_and_normalize_ir(filepath: Path, target_sr: int = SR) -> Optional[np.ndarray]:
-        \\"\\"\\"Load an IR file, force mono / target SR, peak-normalize.\\"\\"\\"
+        \"\"\"Load an IR file, force mono / target SR, peak-normalize.\"\"\"
         try:
             audio, _ = librosa.load(str(filepath), sr=target_sr, mono=True)
             if len(audio) < 64:
@@ -260,7 +260,7 @@ else:
 
     # ─── Stage 3: Classify & build pools ─────────────────────────────
     def compute_ir_features(ir_audio: np.ndarray, sr: int = SR) -> dict:
-        \\"\\"\\"Compute RT60 estimate, spectral centroid, and clarity (C50).\\"\\"\\"
+        \"\"\"Compute RT60 estimate, spectral centroid, and clarity (C50).\"\"\"
         energy = ir_audio ** 2
         cumsum = np.cumsum(energy[::-1])[::-1]
 
@@ -366,13 +366,13 @@ print(f"🟢 [CLAP] Loaded — embedding dim = {CLAP_DIM}")
 
 
 def get_clap_audio_embedding(audio: np.ndarray, sr: int = SR) -> np.ndarray:
-    \\"\\"\\"
+    \"\"\"
     Encode audio through CLAP's audio tower. Returns (CLAP_DIM,) float32.
 
     ⚠ Critical: extract .pooler_output from the wrapper before calling .cpu().
-    \\"\\"\\"
+    \"\"\"
     inputs = clap_processor(
-        audios=audio, sampling_rate=sr, return_tensors="pt"
+        audio=audio, sampling_rate=sr, return_tensors="pt"
     )
     inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
@@ -478,7 +478,7 @@ if STATE_FILE.exists() and not _skip_sterilization:
 
 if not _skip_sterilization:
     def discover_audio_files() -> List[Tuple[Path, str]]:
-        \\"\\"\\"Collect all vocal files from all datasets.\\"\\"\\"
+        \"\"\"Collect all vocal files from all datasets.\"\"\"
         files = []
         # LJSpeech
         for f in sorted(PATHS['ljspeech'].rglob('*.wav')):
@@ -493,7 +493,7 @@ if not _skip_sterilization:
         return files
 
     def sterilize_and_segment(filepath: Path, tag: str) -> List[dict]:
-        \\"\\"\\"Load → noise-reduce → trim → LUFS normalize → segment into 5s windows.\\"\\"\\"
+        \"\"\"Load → noise-reduce → trim → LUFS normalize → segment into 5s windows.\"\"\"
         try:
             audio, _ = librosa.load(str(filepath), sr=SR, mono=True)
         except Exception:
@@ -625,7 +625,7 @@ nb.cells.append(nbf.v4.new_code_cell("""\
 # to simulate terrible recording environments.
 
 def add_noise(audio: np.ndarray, noise_type: str, snr_db: float) -> np.ndarray:
-    \\"\\"\\"Mix coloured noise at the target SNR (5–40 dB).\\"\\"\\"
+    \"\"\"Mix coloured noise at the target SNR (5–40 dB).\"\"\"
     n = len(audio)
     if noise_type == 'white':
         noise = np.random.randn(n)
@@ -661,7 +661,7 @@ def add_noise(audio: np.ndarray, noise_type: str, snr_db: float) -> np.ndarray:
 
 
 def apply_eq(audio: np.ndarray) -> np.ndarray:
-    \\"\\"\\"Random 3-band parametric EQ (simulates mic coloration).\\"\\"\\"
+    \"\"\"Random 3-band parametric EQ (simulates mic coloration).\"\"\"
     from scipy.signal import butter, sosfilt
     bands = [(80, 300), (300, 3000), (3000, 12000)]
     for lo, hi in bands:
@@ -698,14 +698,14 @@ def apply_gain_jitter(audio: np.ndarray) -> np.ndarray:
 
 
 def apply_bitcrush(audio: np.ndarray) -> np.ndarray:
-    \\"\\"\\"Bitcrushing / hard clipping — quantize audio resolution.\\"\\"\\"
+    \"\"\"Bitcrushing / hard clipping — quantize audio resolution.\"\"\"
     bits = random.randint(8, 16)
     levels = 2 ** bits
     return (np.round(audio * levels) / levels).astype(np.float32)
 
 
 def apply_hard_clip(audio: np.ndarray) -> np.ndarray:
-    \\"\\"\\"Harsh mathematical clipping at a random threshold.\\"\\"\\"
+    \"\"\"Harsh mathematical clipping at a random threshold.\"\"\"
     threshold = random.uniform(0.3, 0.9)
     return np.clip(audio, -threshold, threshold).astype(np.float32)
 
@@ -724,7 +724,7 @@ DEGRADATIONS = {
 }
 
 def apply_random_degradations(audio: np.ndarray) -> Tuple[np.ndarray, List[str]]:
-    \\"\\"\\"Apply a random subset of 3–6 degradations. Returns (degraded, names).\\"\\"\\"
+    \"\"\"Apply a random subset of 3–6 degradations. Returns (degraded, names).\"\"\"
     n_augs = random.randint(AUGMENTATIONS_MIN, AUGMENTATIONS_MAX)
     chosen = random.sample(list(DEGRADATIONS.keys()), min(n_augs, len(DEGRADATIONS)))
     for name in chosen:
@@ -754,7 +754,7 @@ nb.cells.append(nbf.v4.new_code_cell("""\
 # ═══════════════════════════════════════════════════════════════════════
 
 def convolve_and_trim(vocal: np.ndarray, ir: np.ndarray) -> np.ndarray:
-    \\"\\"\\"Convolve vocal with IR, trim to exactly 5s, peak-normalize.\\"\\"\\"
+    \"\"\"Convolve vocal with IR, trim to exactly 5s, peak-normalize.\"\"\"
     wet = fftconvolve(vocal, ir, mode='full')[:CLIP_SAMPLES]
     peak = np.max(np.abs(wet))
     if peak > 1e-6:
@@ -763,7 +763,7 @@ def convolve_and_trim(vocal: np.ndarray, ir: np.ndarray) -> np.ndarray:
 
 
 def audio_to_int16(audio: np.ndarray) -> np.ndarray:
-    \\"\\"\\"Convert float32 [-1,1] to int16 for compact storage.\\"\\"\\"
+    \"\"\"Convert float32 [-1,1] to int16 for compact storage.\"\"\"
     return (np.clip(audio, -1, 1) * 32767).astype(np.int16)
 
 
