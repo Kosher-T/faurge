@@ -33,7 +33,7 @@ Before any AI wakes up, the system must establish bulletproof routing, hardware 
 
 ## Phase 2: The Workbench (Data, Environment Prep & VRAM Accounting)
 
-This phase enforces a strict VRAM budget audit before any model weights are written, and establishes the immutable datasets for training.
+This phase enforces a strict VRAM budget audit before any model weights are written, and establishes the immutable synthetic datasets for training the state-aware networks.
 
 ### Memory & Budget Enforcement
 - ~~**`core/vram_policy.py` & `scripts/vram_budget.py`**: Loads models, runs a short inference loop to profile memory fragmentation, and halts the build if peak VRAM exceeds the safety margin (≥ 3.9GB). In CPU-only mode, the VRAM audit is skipped and RAM budget limits are enforced instead.~~
@@ -42,8 +42,8 @@ This phase enforces a strict VRAM budget audit before any model weights are writ
 
 ### Cloud Dataset Preparation (Kaggle Environment)
 *All files here live in the local `kaggle/` directory but are executed in the cloud.*
-- ~~**`kaggle/01_acquire_and_augment.ipynb`**: Downloads VCTK/LJSpeech directly to Kaggle's high-speed storage. Convolves dry vocals with IRs and injects noise.~~
-- **`kaggle/02_generate_physical_labels.ipynb`**: Iterates cloud audio files to calculate ground-truth LTAS, LUFS, LRA, and Crest Factor values for Fabian's training.
+- ~~**`kaggle/01_acquire_and_augment.ipynb`**: Downloads VCTK/LJSpeech directly to Kaggle's high-speed storage. Sterilizes vocals, stages IRs, and pre-computes CLAP target caches.~~
+- **`kaggle/02_generate_physical_labels.ipynb`**: Executes the Degradation Suite. Iterates cloud audio files to map the 1024D fused tensor (Target Concept + Ruined Audio) against ground-truth Deltas (LTAS, LUFS, LRA) and Purity metrics for Fabian's state-aware training.
 - **`kaggle/dataset_manifest.json`**: A lightweight manifest generated in the cloud, tracking checksums. Tracked locally by Git to monitor dataset versions without downloading the 40GB audio files.
 - **`scripts/validate_manifest.py`**: Local script that asserts the Git-tracked manifest is well-formed, contains expected checksums, and the dataset version hasn't drifted. Strengthens the Phase 2 → 3 gate.
 
@@ -57,41 +57,41 @@ This phase enforces a strict VRAM budget audit before any model weights are writ
 
 ## Phase 3: The Cognitive Layer (Cloud Training & Offline Sandbox)
 
-We build and train the tensor networks in the cloud. Checkpoints are optimized, quantized, and exported as immutable artifacts for the edge device.
+We build and train the tensor networks in the cloud. Checkpoints are optimized, quantized, and exported as immutable, stateless artifacts for the edge device.
 
 ### Agent Blueprints (Local & Cloud Shared)
 - **`config/hyperparameters.yaml`**: The single source of truth for learning rates and network dimensions.
-- **`agents/base_agent.py`, `fabian.py`, `ursula.py`, `genesis.py`**: The core AI logic. These files are pushed to Kaggle via GitHub for training, but execute locally during live inference.
+- **`agents/base_agent.py`, `fabian.py`, `ursula.py`, `genesis.py`**: The core AI logic. These files are pushed to Kaggle via GitHub for training, but execute locally during live inference as strict one-shot feed-forward networks.
 
 ### Ursula's Offline Sandbox
 - **`core/gym_env.py`**: Ursula's DSP simulator. 
-  - *Note for Kaggle:* Since Kaggle does not have PipeWire, this environment will use a Python-native DSP library (like `pedalboard` or headless `pysndfx`) to simulate EQ and Compression during cloud training.
+  - *Note for Kaggle:* Since Kaggle does not have PipeWire, this environment will use a Python-native DSP library (like `pedalboard` or headless `pysndfx`) to simulate EQ and Compression during cloud RL training.
 
 ### Cloud Training Orchestration (Kaggle Environment)
 - **`kaggle/requirements-kaggle.txt`**: Cloud-specific dependencies (`pedalboard`, `pyloudnorm`, audio libs) `pip install`-ed at the top of each notebook.
-- **`kaggle/04_train_fabian.ipynb`**: Trains the Routing and Physical Regression heads using the cloud-generated labels.
-- **`kaggle/05_train_ursula.ipynb`**: Runs the Soft Actor-Critic RL loop inside the headless Python DSP simulator.
-- **`kaggle/06_train_genesis.ipynb`**: Trains the DDSP synthesizer against real-world IRs.
+- **`kaggle/04_train_fabian.ipynb`**: Trains the Routing and Physical Regression heads. Teaches Fabian to act as an error-comparator, predicting exactly how far apart the input and target are (Deltas).
+- **`kaggle/05_train_ursula.ipynb`**: Runs the Soft Actor-Critic RL loop inside the headless Python DSP simulator. She learns the physics of EQ/Compression and is exported as a frozen, deterministic policy network.
+- **`kaggle/06_train_genesis.ipynb`**: Trains the DDSP synthesizer against the 20,000-sample matrix (Signal Extraction, Harmonic Inpainting, Dereverberation). Uses Multi-Scale Spectral Loss via convolution validation.
 - **`kaggle/07_quantize_and_export.ipynb`**: Runs post-training float16/INT8 quantization on the final models. Exports them as lightweight ONNX/TFLite weights, ready to be zipped and downloaded to the local edge machine.
 
 ---
 
 ## Phase 4: The Live Loop (Local Orchestration & Execution)
 
-The final phase glues the trained networks (downloaded from Kaggle) to the local PipeWire infrastructure with extreme fault tolerance.
+The final phase glues the trained networks (downloaded from Kaggle) to the local PipeWire infrastructure. The Orchestrator manages all state and memory, ensuring the AI models act purely as fast, stateless actuators.
 
 ### Core Execution & Safety
 - **`faurge.py` & `systemd/faurge-main.service`**: The root execution daemon. 
-- **`core/bake_orchestrator.py`**: The sequential Fabian → Ursula → Genesis pipeline. Wakes agents, runs inference, writes IRs to disk, and guarantees full VRAM unload.
-- **`core/audio_processor.py` & `core/state_manager.py`**: Encapsulates real-time processing, buffer math, and smooth cross-fade logic for hot-swapping baked IRs.
+- **`core/bake_orchestrator.py`**: The Integrator. Sanitizes prompts, fuses tensors, runs the Fabian evaluation, accumulates Deltas (`T_new = T_old + Delta`), and triggers Ursula/Genesis in rigid one-shot forward passes until Cosine Similarity passes `0.85`.
+- **`core/audio_processor.py` & `core/state_manager.py`**: Encapsulates real-time processing, buffer math, and smooth 10ms cross-fade logic for hot-swapping baked IRs in PipeWire.
 - **`core/signal_handlers.py` & `core/kill_switch.py`**: Ensures graceful teardowns and provides an instant hardware bypass.
 
 ### Monitoring & Rollout
 - **`web_api/app.py`**: API-key secured server exposing status metrics and bypass controls.
-- **`core/baker.py` & `scripts/backup_rollback_policy.sh`**: Writes IRs to disk and manages automated rollback snapshots.
+- **`core/baker.py` & `scripts/backup_rollback_policy.sh`**: Writes final C++ plugin configurations and IRs to disk and manages automated rollback snapshots.
 
 ### Local Validation Gates
-- **`tests/test_live_loop.py`**: End-to-end simulations validating bypass fallback under massive GPU spikes and asserting <20ms latency under load.
+- **`tests/test_live_loop.py`**: End-to-end simulations validating the reflection loop, bypass fallback under massive GPU spikes, and asserting <20ms latency under load.
 - **`tests/test_vram_unload.py`**: Asserts GPU memory returns to baseline after a complete local bake cycle.
 
 ---

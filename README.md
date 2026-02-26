@@ -7,12 +7,12 @@
 ## 🏗 Architecture & Hardware Awareness
 Faurge utilizes a **Split-Brain** topology that fundamentally separates active digital signal processing from heavy AI inference. It is built with a strict "Zero-Idle Overhead" philosophy, making it a viable tool for gamers and power users operating under strict 4GB VRAM constraints.
 
-### The Workflow: Bake and Sleep
+### The Workflow: The State-Aware Closed Loop
 Faurge AI agents **do not run constantly in the background**. The system separates the **Fast Path** (Real-time C++ DSP) from the **Slow Path** (AI Reasoning). 
 
-When triggered, Faurge captures a 5-second buffer of your audio into the Shadow Space. The AI agents wake up, calculate the optimal EQ parameters and generate static Impulse Responses (IRs). They "bake" these solutions into the active PipeWire DSP plugins, and immediately unload from VRAM. The lightweight C++ plugins handle the live audio stream with `<1%` CPU usage.
+Instead of an open-loop guess, Faurge operates as a closed-loop state-space model governed by the Python Orchestrator. When triggered, the Orchestrator captures a 5-second buffer into the Shadow Space. The AI evaluates the mathematical gap between your current microphone and your desired acoustic scene. 
 
-
+The models "bake" the required C++ plugin parameters and custom Impulse Responses (IRs) in one-shot forward passes, validate the resulting audio via a reflection loop, and immediately unload from VRAM. The lightweight C++ plugins then handle the live audio stream with `<1%` CPU usage.
 
 ```mermaid
 graph TD
@@ -22,41 +22,45 @@ graph TD
         C --> D[Processed Output]
     end
 
-    subgraph "Asynchronous Capture"
-        A -.-> |Targeted Isolation| E[Shadow Space Buffer]
-        W[VRAM Watchdog] -- "Monitors GPU Load" --> W
+    subgraph "The Orchestrator (Integrator & Memory Bank)"
+        O_CPU[Prompt Sanitizer & Intent Fallback]
+        O_Mem[State Accumulator: T_new = T_old + Delta]
+        O_Shadow[Shadow Space Buffer & Cosine Similarity Check]
     end
 
     subgraph "Cognitive Layer (On Demand Tensor Network)"
-        W -- "Triggers on Idle VRAM" --> F[Fabian: NLP Router]
-        E -- "Baseline Metrics" --> F
-        F -- "Target LTAS & LUFS" --> U[Ursula: RL DSP Tuner]
-        F -- "Target CLAP Vector" --> G[Genesis: Math Engine]
+        A -.-> |Capture Buffer| O_Shadow
+        O_CPU --> |Fused Tensor: Target + Current| F
         
-        E -- "LTAS Feedback" --> U
-        E -- "High-Res STFT" --> G
+        F[Fabian: State-Aware Controller] 
+        U[Ursula: One-Shot DSP Actuator]
+        G[Genesis: One-Shot DDSP Engine]
         
-        G -- "Compiles IR / CNG" --> I[Validator]
-        U -- "Optimizes DSP API" --> I
+        F -- "Calculates Baseline or Deltas" --> O_Mem
+        O_Mem -- "Accumulated Physical Targets" --> U
+        O_Mem -- "Accumulated Latent Scene" --> G
         
-        I -- "Verification Pass" --> J[Commit to Profile]
+        U -- "Outputs Exact DSP Params" --> O_Shadow
+        G -- "Compiles Custom ir.wav" --> O_Shadow
     end
 
-    J -- "Cross-fade Update" --> C
+    O_Shadow -.-> |Fail: Loop triggers Delta calculation| F
+    O_Shadow -- "Pass: Cross-fade Update" --> C
 ```
 
 ## 🤖 The Agents (Fa-Ur-Ge)
-Faurge abandons pure semantic communication between agents in favor of concrete physics and high-dimensional latent space embeddings.
+Faurge abandons pure semantic communication between agents in favor of concrete physics and high-dimensional latent space embeddings. The agents are strictly stateless; all memory is handled mathematically by the Orchestrator.
 
-* **Fabian (Agent 1):** The Semantic Router. A lightweight CLAP-based model that translates user intent into a **Split Destination**: concrete physics (LTAS/LUFS targets) for the source, and abstract math (CLAP vectors) for the scene.
-* **Ursula (Agent 2):** The DSP Tuner. A Reinforcement Learning (RL) agent that manipulates standard headless DSP plugins (EQ, Compression, De-essing) to mathematically match Fabian's physical LTAS/LUFS targets.
-* **Genesis (Agent 3):** The Generative Math Engine. A Differentiable DSP (DDSP) model utilizing STFT math. She bridges the gap between Fabian's semantic CLAP vector and physical reality, synthesizing exact Impulse Responses and Procedural Comfort Noise without drawing raw audio waveforms.
+* **The Orchestrator:** The Python-based backbone running on the CPU. It sanitizes user intent, fuses the latent states, and acts as the mathematical accumulator/integrator to prevent the AI loop from oscillating.
+* **Fabian (Agent 1):** The State-Aware Controller. A custom CLAP-based routing model that evaluates the fused 1024D tensor (Target + Current Audio). He calculates the exact error (Cosine Similarity) and outputs **Deltas** (refinements) to bridge the gap.
+* **Ursula (Agent 2):** The DSP Actuator. A completely deterministic, **One-Shot** feed-forward network during live execution. She receives absolute physical targets (LTAS/LUFS) from the Orchestrator and outputs the exact parameters required for standard headless C++ plugins.
+* **Genesis (Agent 3):** The Generative Math Engine. A Differentiable DSP (DDSP) model utilizing STFT math. Operating as a **One-Shot** actuator, she reads the raw audio spectrogram and mathematically synthesizes exact Impulse Responses (`ir.wav`) to delete bad room acoustics and reconstruct missing vocal harmonics.
 
 ## 🛠 Key Features
-- **Acoustic Seeding:** Synthesizes high-fidelity procedural "Room Tone" beneath heavily gated or dead microphone signals to eliminate listener fatigue.
+- **Closed-Loop Reflection:** Automatically audits its own DSP output in the Shadow Space, refining parameters until the audio mathematically matches the user's prompt before pushing to the live stream.
+- **Intent Fallback:** Intelligently intercepts vague user prompts (e.g., "make it better") and translates them into mathematically dense acoustic targets to prevent latent-space collapse.
 - **Asynchronous Optimization:** Isolates and records specific application audio, waking the AI agents only when VRAM is free to generate an optimized tactical profile.
-- **The Shadow Realm:** A non-audible parallel environment where agents extract features and validate acoustic changes before applying them to your live audio stream.
-- **De-Rooming:** High-precision inverse-filtering to neutralize suboptimal room acoustics.
+- **Acoustic Seeding:** Synthesizes high-fidelity procedural "Room Tone" beneath heavily gated or dead microphone signals to eliminate listener fatigue.
 
 ## 🚀 Getting Started
 Faurge is built for **Linux (Pop!_OS/Ubuntu)** using PipeWire.
