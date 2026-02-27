@@ -51,25 +51,73 @@ Genesis is not trained to directly guess an `ir` waveform, as phase alignment ma
 
 By backpropagating this error, she learns exactly how to manipulate the DDSP oscillators to neutralize a bad room and perfectly reconstruct the harmonic series.
 
-#### B. The 20,000 Sample Dataset Matrix
-To ensure Genesis can handle all real-world failures, the dataset generates exactly 20,000 training triples, rigidly distributed across five core acoustic repair scenarios:
+#### 🗄️ Raw Material Datasets
+* **VCTK / LJSpeech:** Core baseline datasets for pristine, dry studio vocals.
+* **VoicePersona-Dataset:** Ground-truth semantic metadata mapping physical acoustic textures to text (replaces manual tagging).
+* **DAPS (Device and Produced Speech):** Parallel corpus containing pristine studio audio (`cleanraw`) perfectly time-aligned with the exact same speech recorded on consumer devices (smartphones, tablets) in real physical rooms.
+* **MicIRP (Microphone Impulse Response Project):** ~65 physical Impulse Responses of vintage, rare, and classic microphones (1940s ribbons, Soviet dynamics, tube condensers).
+* **MIT McDermott IRs:** High-quality physical environmental impulse responses (cathedrals, cars, classrooms).
 
-**1. Signal Extraction & Room Dynamics (20% | 4,000 samples)**
-*Teaches her how noise interacts with acoustic space.*
-* **1c (6% | 1,200 samples):** *Target:* Room A | *Input:* Room B + Noise. (The hardest calculation: strips a bad room, strips noise, synthesizes a new room).
-* **1 (7% | 1,400 samples):** *Target:* Room A | *Input:* Room A + Noise. (Baseline control: deletes noise without deleting the existing reverb tail).
-* **1a (4% | 800 samples):** *Target:* Dry | *Input:* Room A + Noise. (Total acoustic stripping).
-* **1b (3% | 600 samples):** *Target:* Room A | *Input:* Dry + Noise. (Adds room while filtering out noise).
+---
 
-**2. Harmonic Inpainting (20% | 4,000 samples)**
-* **2 (20% | 4,000 samples):** *Target:* Full Spectrum + Room A | *Input:* Telephone Bandwidth + Room A. (Forces the network to generate missing chest and air frequencies from heavily truncated signals).
+#### 📌 Variables Legend
+* **$V$**: Pristine, dry vocal segment (DAPS `cleanraw`, LJSpeech, VCTK).
+* **$Desc$**: Semantic string describing the vocal's acoustic texture (sourced via VoicePersona-Dataset).
+* **$IR_{tgt}$**: High-quality, labeled target Impulse Response (MIT dataset, or MicIRP for aesthetic upgrades).
+* **$Scene$**: Semantic string describing the target room or target microphone (e.g., *"in a large brick open plan office"*, *"through a vintage 1950s ribbon microphone"*).
+* **$IR_{bad}$**: Terrible, boxy, or phase-smeared Impulse Response.
+* **$N$**: Noise arrays (HVAC, white noise, etc).
+* **$IR_{lofi\_prop}$**: Destructive IR simulating physical props or vintage bandwidth limitations (sourced from MicIRP).
 
-**3. Acoustic Stripping / Dereverberation (20% | 4,000 samples)**
-* **3a (13% | 2,600 samples):** *Target:* Room A | *Input:* Muddy Room. (The ultimate "Room Swap", reversing heavy phase cancellation).
-* **3 (7% | 1,400 samples):** *Target:* Dry | *Input:* Muddy Room. (Reverses comb-filtering back to a pristine zero-state).
+---
 
-**4. Target Projection (20% | 4,000 samples)**
-* **4 (20% | 4,000 samples):** *Target:* Specific IR | *Input:* Dry. (Teaches the DDSP engine to map the CLAP geometry directly to exact early reflections and decay times).
+#### 🧮 The V3 Matrix
 
-**5. Pure Denoising / Crackle Removal (20% | 4,000 samples)**
-* **5 (20% | 4,000 samples):** *Target:* Dry | *Input:* Dry + Noise/Crackle. (Foundational cleanup. Differentiates the human voice fundamental frequencies from electrical hums, broadband hiss, and hardware pops).
+##### 1. Acoustic Space Transfer (The Room Swap) — 25% (5,000 samples)
+* **Difficulty:** Extreme
+* **Target (For Loss):** $V * IR_{tgt}$ (or DAPS `cleanraw` * $IR_{tgt}$)
+* **Input 2 (Current STFT):** $(V * IR_{bad}) + N$ (or DAPS `iphone_bedroom` / consumer device recordings)
+* **Input 1 ($c_{scene}$ Prompt):** `"[Desc] [Scene]."`
+* **Logic:** Genesis must simultaneously strip a bad room, ignore the background noise, and synthesize the target room's decay tail.
+
+##### 2. Acoustic Stripping (Dereverberation) — 20% (4,000 samples)
+* **Difficulty:** Very High
+* **Target (For Loss):** $V$ (Pure dry vocal)
+* **Input 2 (Current STFT):** $(V * IR_{bad}) + N$ (Heavily leveraging DAPS real-world consumer recordings here)
+* **Input 1 ($c_{scene}$ Prompt):** `"[Desc] in a completely dry, soundproof recording studio."`
+* **Logic:** Reverses real-world comb-filtering, hardware clipping, and phase cancellation back to absolute zero.
+
+##### 3. Harmonic Inpainting (Bandwidth Extension) — 20% (4,000 samples)
+* **Difficulty:** Very High
+* **Target (For Loss):** $V * IR_{tgt}$
+* **Input 2 (Current STFT):** `Highpass(Lowpass( ` $V * IR_{tgt}$ ` ))` 
+* **Input 1 ($c_{scene}$ Prompt):** `"A full-spectrum, high-fidelity [Desc] [Scene]."`
+* **Logic:** Generates missing sub-harmonics (chest resonance) and high frequencies (air) from a severely frequency-truncated signal.
+
+##### 4. Signal Extraction (Pure Denoising / Babble Removal) — 15% (3,000 samples)
+* **Difficulty:** High
+* **Target (For Loss):** Source audio before environmental playback.
+* **Input 2 (Current STFT):** Distant-mic audio with heavy background bleed (Strictly sourced from VOiCES).
+* **Input 1 ($c_{scene}$ Prompt):** `"[Desc] [Scene] with isolated, clear vocals."`
+* **Logic:** The room stays exactly the same, but the fundamental frequency ($f_0$) of the primary speaker is preserved while convolutional background babble is phase-cancelled.
+
+##### 5. Timbral & Proximity Reconstruction — 10% (2,000 samples)
+* **Difficulty:** Medium
+* **Target (For Loss):** $V * IR_{vintage\_mic}$ (Leveraging MicIRP to provide rich, warm harmonic targets)
+* **Input 2 (Current STFT):** `Bad_Random_EQ( ` $V * IR_{tgt}$ ` )` or harsh headset microphone simulations.
+* **Input 1 ($c_{scene}$ Prompt):** `"A rich, balanced, close-mic [Desc] [Scene]."`
+* **Logic:** Corrects severe EQ imbalances (thin/tinny or booming proximity effect) and replaces harsh digital capture with warm analog harmonics.
+
+##### 6. Stylistic / Diegetic Degradation — 5% (1,000 samples)
+* **Difficulty:** Low
+* **Target (For Loss):** $V * IR_{lofi\_prop}$ (MicIRP vintage broadcast mics, Walkie-Talkies, etc.)
+* **Input 2 (Current STFT):** $V * IR_{pristine\_studio}$
+* **Input 1 ($c_{scene}$ Prompt):** `"[Desc] transmitted through an antique 1940s dynamic microphone."`
+* **Logic:** The reverse Faurge. Mathematically destroying a perfect vocal to match a cinematic diegetic prompt.
+
+##### 7. Target Scene Projection (Acoustic Addition) — 5% (1,000 samples)
+* **Difficulty:** Trivial
+* **Target (For Loss):** $V * IR_{tgt}$
+* **Input 2 (Current STFT):** $V$ (or $V$ with extremely mild background noise)
+* **Input 1 ($c_{scene}$ Prompt):** `"[Desc] [Scene]."`
+* **Logic:** Pure spatial synthesis from a sterile starting point, ensuring she explicitly maps the CLAP room/mic prompt to the target acoustic fingerprint.
