@@ -12,8 +12,8 @@ The de-clipper is a 5-stage pipeline:
 
 ```
 Raw Audio → Detection → Boundary Analysis → Reconstruction → Post-Filter → Clean Audio
-                                                                      ↓
-                                                                  Metrics/JSON
+                                                                  ↓
+                                                             Metrics/JSON
 ```
 
 ### Stage 1: Detection
