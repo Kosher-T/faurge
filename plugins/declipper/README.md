@@ -1,4 +1,4 @@
-# Faurge Specialist: De-Clipper
+# Faurge Plugin: De-Clipper
 
 > **Algorithmic Cubic/Spline Waveform Reconstruction** — Standard C++ DSP
 
@@ -52,7 +52,7 @@ sudo apt install libsndfile1-dev cmake g++
 
 ### Build
 ```bash
-cd specialists/declipper
+cd plugins/declipper
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
@@ -137,7 +137,7 @@ auto result = dc.processFile("input.wav", "output.wav");
 ## File Structure
 
 ```
-specialists/declipper/
+plugins/declipper/
 ├── CMakeLists.txt
 ├── README.md
 ├── include/faurge/

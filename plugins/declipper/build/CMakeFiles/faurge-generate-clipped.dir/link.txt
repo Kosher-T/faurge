@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/faurge-generate-clipped.dir/test/generate_clipped.cpp.o" -o faurge-generate-clipped  -lsndfile 
