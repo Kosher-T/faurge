@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/faurge-denoise.dir/src/main.cpp.o" "CMakeFiles/faurge-denoise.dir/src/denoiser.cpp.o" "CMakeFiles/faurge-denoise.dir/src/noise_estimator.cpp.o" "CMakeFiles/faurge-denoise.dir/src/denoise_metrics.cpp.o" -o faurge-denoise  /home/itorousa/Documents/Code/faurge/plugins/denoiser/rust/target/release/libdf_bridge.a -lsndfile -lpthread -ldl -lm 
