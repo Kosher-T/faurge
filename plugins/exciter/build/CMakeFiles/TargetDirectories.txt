@@ -1,0 +1,9 @@
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/faurge-excite.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/faurge-generate-excite-pairs.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/test_high_band.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/test_low_band.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/test_pipeline.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/test_metrics.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/test.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/edit_cache.dir
+/home/itorousa/Documents/Code/faurge/plugins/exciter/build/CMakeFiles/rebuild_cache.dir

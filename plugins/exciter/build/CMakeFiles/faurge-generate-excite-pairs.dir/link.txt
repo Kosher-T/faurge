@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/faurge-generate-excite-pairs.dir/test/generate_pairs.cpp.o" -o faurge-generate-excite-pairs  -lsndfile 
