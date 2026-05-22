@@ -53,5 +53,4 @@ Detail the strategy for ensuring the code is production-ready.
 If the task spans multiple new directories or files, provide an ASCII file tree with brief descriptions.
 
 ***
-USER REQUEST: 
-[INSERT YOUR 1-2 LINE PROMPT HERE]
+You will write this to implementation_plan.md in the project root, or overwrite the contents of the existing implementation_plan.md.
