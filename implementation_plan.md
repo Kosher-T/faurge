@@ -1,236 +1,380 @@
-# Faurge Plugin: Exciter — Implementation Plan
+# Ursula's Plugin Suite — Implementation Plan
 
 ## Summary
 
-Build `plugins/exciter/` — a dual-band DSP harmonic synthesis plugin for bandwidth extension, as specified in Phase 2 of `docs/phases.md`. The exciter consists of two parallel processing engines: **High-end saturation** (waveshaping harmonic enhancement) and **Low-end sub-octave tracking** (bass extension via frequency halving). Architecture, build system, test framework, and code style are borrowed from the existing `plugins/declipper/` and `plugins/denoiser/` plugins.
+Build seven headless DSP plugins that form Ursula's "hands." Each plugin is dual-use:
 
-## Technical Considerations & Constraints
+- **Degradation**: Ruin pristine audio during training data generation
+- **Restoration**: Apply Ursula's output parameters during inference to fix audio
 
-> **Shared boilerplate** — The CMake build (C++17, libsndfile via pkg-config), the custom test framework (`TEST`/`ASSERT_TRUE` macros with static registration), the WAV I/O in `processFile()`, and the CLI arg parser are all copied verbatim from declipper/denoiser. No new dependencies are introduced.
-
-> **All-DSP, no ML** — Unlike the denoiser (which depends on a Rust DNN bridge), the exciter is pure algorithmic DSP. This means no external model downloads, no Rust compilation, and zero runtime dependencies beyond libsndfile. Build and test times are minimal.
-
-> **Dual-band crossover** — The high and low bands operate in parallel, each with its own crossover frequency. The raw input is split via complementary Linkwitz-Riley 4th-order (LR4) filters at configurable crossover points, processed independently by each engine, then summed back together. This avoids phase cancellation at the crossover seam.
-
-## Open Questions
-
-1. **Oversampling strategy for high-band saturation** — Waveshaping generates harmonics that can alias above Nyquist. The declipper uses 4x oversampling for ISP detection. Should the high-band saturator use simple 2x linear oversampling, or a more CPU-intensive 4x with polyphase anti-alias? **Default to 2x with a 2nd-order Butterworth post-filter (matching declipper's antiAliasFilter). Simpler = better for real-time.**
-
-2. **Sub-octave tracking method** — Two options: (a) full-wave rectification + PLL-style tracking (more robust), or (b) zero-crossing period detection (cheaper but fragile on noisy signals). **Default to full-wave rectification + 4th-order low-pass at 120 Hz to extract the sub-harmonic envelope. Simple, deterministic, and glitch-free.**
-
-## Technical Design
-
-### Architecture / Logic Flow
-
-```
-                ┌─────────────────────────────────────┐
-Input ────────► │  Crossover LR4 HP (highCrossoverHz) │──► High-Band Saturator ──┐
-                │                                     │     (tanh waveshaping,   │
-                │  Crossover LR4 LP (highCrossoverHz) │      2x oversample)      │
-                └─────────────────────────────────────┘                          │
-                                                                                ├─► ► Output
-                ┌─────────────────────────────────────┐                          │
-                │  Crossover LR4 HP (lowCrossoverHz)  │                          │
-                │                                     │──► Low-Band Sub-Octave  ──┘
-                │  Crossover LR4 LP (lowCrossoverHz)  │     (full-wave rect. +
-                └─────────────────────────────────────┘      120 Hz LPF + mix)
-```
-
-### Interface Definitions
-
-```cpp
-// include/faurge/exciter_types.hpp
-
-namespace faurge {
-
-struct ExciterConfig {
-    // High band — harmonic saturation
-    float highDriveDb     = 3.0f;    // Pre-saturation gain (dB)
-    float highMix         = 0.50f;   // Wet/dry mix, 0–1 range
-    float highCrossoverHz = 2000.0f; // High-band crossover frequency
-    bool  highEnable      = true;
-
-    // Low band — sub-octave synthesis
-    float lowDriveDb      = 0.0f;    // Pre-rectification gain (dB)
-    float lowMix          = 0.35f;   // Wet/dry mix, 0–1 range
-    float lowCrossoverHz  = 200.0f;  // Low-band crossover frequency
-    float lowSubLevel     = 0.50f;   // Sub-octave injection level
-    bool  lowEnable       = true;
-
-    // Master
-    float masterVolume    = 1.0f;
-
-    bool  jsonOutput      = false;
-    bool  verbose         = false;
-};
-
-struct ExciterResult {
-    float processingTimeMs   = 0.0f;
-    float inputPeakDb        = -120.0f;
-    float outputPeakDb       = -120.0f;
-    float inputRmsDb         = -120.0f;
-    float outputRmsDb        = -120.0f;
-    float highBandEnergyDb   = -120.0f;
-    float lowBandEnergyDb    = -120.0f;
-    size_t framesProcessed   = 0;
-    bool   success           = false;
-    std::string errorMessage;
-};
-
-}
-```
+Each follows the pattern established by `plugins/declipper/`, `plugins/denoiser/`, and `plugins/exciter/`: C++17, CMake, libsndfile, standalone CLI executable + library, custom test framework.
 
 ---
 
-## Implementation Details
+## Plugin 1: Parametric EQ
 
-### DSP Core
+Controls spectral shaping — Ursula's primary tool for closing the LTAS gap.
 
-#### [NEW] `plugins/exciter/include/faurge/high_band.hpp`
-#### [NEW] `plugins/exciter/src/high_band.cpp`
-- **HighBand** class with `void process(const float* input, float* output, size_t numSamples, int sampleRate)`
-- Internal oversample buffer (2x), butterworth anti-alias post-filter
-- Waveshaping via `tanh(drive * sample)` for even-order saturation
-- Optional asymmetric transfer function for 2nd-harmonic flavour
-- Handles drive=0 (bypass) edge case: identity passthrough
-- Handles empty buffer edge case: no-op
+### Parameters (31 bands × 6 per band)
 
-#### [NEW] `plugins/exciter/include/faurge/low_band.hpp`
-#### [NEW] `plugins/exciter/src/low_band.cpp`
-- **LowBand** class with `void process(const float* input, float* output, size_t numSamples, int sampleRate)`
-- Sub-octave extraction chain:
-  1. Full-wave rectification: `abs(sample)`
-  2. 4th-order Butterworth LPF at 120 Hz to isolate envelope
-  3. Scale by `subLevel` and `drive`
-- Edge case: silence in → silence out (no runaway oscillation)
-- Edge case: very low sample rate (< 4000 Hz) → clamp crossover to avoid degenerate filters
+| Per band | Parameter | Range | Description |
+|----------|-----------|-------|-------------|
+| ×31 | `freq_hz` | 20–20000 | Center frequency |
+| ×31 | `gain_db` | -24–+24 | Boost/cut |
+| ×31 | `q` | 0.1–10 | Bandwidth |
+| ×31 | `filter_type` | {peak, low_shelf, high_shelf, highpass, lowpass, bandpass, notch} | 7-way categorical |
+| ×31 | `stereo_skew_db` | -6–+6 | L/R gain difference for this band |
+| ×31 | `dynamic_depth` | 0–1 | How much gain varies with input level (0 = static, 1 = fully dynamic EQ) |
 
-### Orchestrator
-
-#### [NEW] `plugins/exciter/include/faurge/exciter.hpp`
-#### [NEW] `plugins/exciter/src/exciter.cpp`
-- **Exciter** class, mirrors `Declipper`/`Denoiser` API exactly:
-  - `ExciterResult process(std::vector<float>& audio, int sampleRate)`
-  - `ExciterResult processFile(const std::string& inputPath, const std::string& outputPath)`
-- Implements LR4 crossover splitting:
-  - Two cascaded 2nd-order Butterworth filters per band (high-pass + low-pass)
-  - Process high band → `HighBand`, low band → `LowBand`
-  - Sum processed bands
-- Edge case: both bands disabled → pure passthrough
-- Edge case: empty audio → return `success=false` with error message
-
-### Crossover Filter
-
-#### [NEW] `plugins/exciter/include/faurge/crossover_filter.hpp`
-#### [NEW] `plugins/exciter/src/crossover_filter.cpp`
-- **CrossoverFilter** utility class, not exposed in public API
-- 4th-order Linkwitz-Riley (two cascaded 2nd-order Butterworth stages)
-- `void process(const float* input, float* lowOut, float* highOut, size_t numSamples, int sampleRate, float crossoverHz)`
-- Edge case: `crossoverHz >= sampleRate/2` → all content goes to low band
-- Edge case: `crossoverHz <= 20` → all content goes to high band
-
-### Metrics / Reporting
-
-#### [NEW] `plugins/exciter/include/faurge/exciter_metrics.hpp`
-#### [NEW] `plugins/exciter/src/exciter_metrics.cpp`
-- Mirrors `DenoiseMetrics` / `Metrics` patterns:
-  - `static std::string toJson(const ExciterResult& result)`
-  - `static void printSummary(const ExciterResult& result)`
+Total: 186 continuous + categorical parameters.
 
 ### CLI
 
-#### [NEW] `plugins/exciter/src/main.cpp`
-- Mirrors `declipper/src/main.cpp` and `denoiser/src/main.cpp`:
-  - `faurge-excite <input.wav> <output.wav> [options]`
-  - CLI args: `--high-drive`, `--high-mix`, `--high-cross`, `--low-drive`, `--low-mix`, `--low-cross`, `--low-sub`, `--no-high`, `--no-low`, `--json`, `--verbose`, `--help`
+```
+faurge-eq <input.wav> <output.wav> [options]
+  --band1-freq 1000 --band1-gain -3.0 --band1-q 1.4 --band1-type peak --band1-skew 0 --band1-dynamic 0
+  --band2-freq 200  --band2-gain +2.5 --band2-q 0.7 --band2-type low_shelf ...
+  --band31-freq 60  --band31-gain -0.5 --band31-q 1.0 --band31-type peak ...
+  --json --verbose
+```
 
-### Training Pair Generator
+### Degradation mode
 
-#### [NEW] `plugins/exciter/test/generate_pairs.cpp`
-- Mirrors `generate_clipped.cpp` / `generate_noisy.cpp`
-- `faurge-generate-excite-pairs <clean.wav> <excited.wav> [options]`
-- Applies controlled harmonic distortion and sub-octave to create pairs for cloud training
-
-### Build System
-
-#### [NEW] `plugins/exciter/CMakeLists.txt`
-- Minimal: C++17, PkgConfig, libsndfile, no extra deps
-- Targets: `faurge-excite` (main), `faurge-generate-excite-pairs` (training), individual test executables
+`faurge-eq-ruin <input.wav> <output.wav>`
+Applies 1–6 random bands with random freq/gain/Q/type/skew/dynamic to destroy spectral balance.
 
 ---
 
-## Environment & Build
+## Plugin 2: Compressor
 
-- **No new dependencies.** libsndfile is already required by both existing plugins.
-- Build procedure identical to declipper:
-  ```bash
-  cd plugins/exciter && mkdir build && cd build
-  cmake .. -DCMAKE_BUILD_TYPE=Release
-  make -j$(nproc)
-  ctest --output-on-failure
-  ```
+Controls dynamic range — Ursula's tool for matching LUFS and crest factor.
 
----
+### Parameters
 
-## Test & Verification Plan
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `threshold_db` | -60–0 | Level above which compression kicks in |
+| `ratio` | 1–20 | Compression ratio (1 = off) |
+| `attack_ms` | 0.1–100 | How fast the compressor reacts |
+| `release_ms` | 10–1000 | How fast the compressor recovers |
+| `knee_db` | 0–12 | Smooth knee width |
+| `lookahead_ms` | 0–10 | Lookahead window for anticipatory gain reduction |
+| `hold_ms` | 0–200 | Hold time before release phase begins |
+| `wet_dry_mix` | 0–1 | Parallel compression blend |
+| `stereo_link` | 0–1 | 0 = independent channels, 1 = full link (average detection) |
+| `sidechain_hp_hz` | 20–500 | Highpass filter on the detection circuit |
+| `sidechain_lp_hz` | 500–20000 | Lowpass filter on the detection circuit |
+| `saturate_drive_db` | 0–12 | Extra saturation applied to the compressed signal |
+| `output_trim_db` | -12–+12 | Makeup gain after compression |
+| `detector_type` | {RMS, peak, feed_forward, feed_back} | 4-way detection mode |
 
-#### [NEW] `plugins/exciter/test/test_high_band.cpp`
-- `test_high_band_bypass_at_zero_drive`: With drive=0, output should match input within floating-point tolerance.
-- `test_high_band_generates_harmonics`: Sine tone at 500 Hz through saturator should produce measurable 1000 Hz (2nd harmonic) component.
-- `test_high_band_does_not_clip`: output samples stay within [-1, 1] even with extreme drive values.
-- `test_high_band_no_self_oscillation_on_silence`: Silence in → a few floating-point residuals but no growing oscillation.
-- `test_high_band_drive_increases_energy`: RMS energy monotonically increases with drive parameter.
+Total: 14 parameters.
 
-#### [NEW] `plugins/exciter/test/test_low_band.cpp`
-- `test_low_band_generates_sub_octave`: A 200 Hz sine produces a measurable 100 Hz component at the output.
-- `test_low_band_bypass_at_zero_mix`: With mix=0, output should match input.
-- `test_low_band_silence_in_silence_out`: All-zero input produces all-zero output.
-- `test_low_band_sub_level_controls_energy`: Output low-frequency energy scales with subLevel parameter.
-
-#### [NEW] `plugins/exciter/test/test_pipeline.cpp`
-- `test_full_pipeline_increases_high_freq_energy`: Processing a broadband signal increases spectral energy in the high band.
-- `test_full_pipeline_increases_low_freq_energy`: Processing a bass signal increases spectral energy in the low band.
-- `test_pipeline_passthrough_at_minimal_settings`: With all drives=0, mix=0, output closely matches input.
-- `test_pipeline_no_clipping`: Output samples stay within [-1, 1] for reasonable input.
-- `test_processing_time_is_reasonable`: 1 second at 48kHz processes in under 500 ms.
-
-#### [NEW] `plugins/exciter/test/test_metrics.cpp`
-- `test_json_output_is_valid`: JSON string contains all expected fields.
-- `test_metrics_are_reasonable`: Peak/RMS fields are in valid ranges, processing time is non-negative.
-
-### Manual Verification
-1. `./faurge-excite input_sine.wav output.wav --verbose` — verify console output shows band energies.
-2. `./faurge-excite input.wav output.wav --json | python -m json.tool` — validate JSON structure.
-3. `./faurge-generate-excite-pairs clean.wav excited.wav --high-drive 6` — verify output file was written correctly with libsndfile.
-4. Listen-test: a 100 Hz sine should produce audible sub-bass; a 5 kHz sine should produce brighter harmonics.
-5. Spectrum analysis with `ffmpeg` or `sox`: confirm harmonic peaks at 2×, 3× the input frequency in the high band.
-
----
-
-## File Structure
+### CLI
 
 ```
-plugins/exciter/
+faurge-compress <input.wav> <output.wav> [options]
+  --threshold -24 --ratio 4.0 --attack 5 --release 150 --knee 6
+  --lookahead 2 --hold 50 --mix 0.8 --link 1.0
+  --sidechain-hp 80 --sidechain-lp 18000 --saturate 3.0 --trim +1.5 --detector RMS
+  --json --verbose
+```
+
+### Degradation mode
+
+`faurge-compress-ruin <input.wav> <output.wav>`
+Aggressive compression (high ratio, low threshold, fast attack) or none at all — both degrade.
+
+---
+
+## Plugin 3: Esser (Dynamic Sibilance Processor)
+
+Controls the sibilance band — applies gain reduction/boost only when the monitored band exceeds threshold.
+
+### Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `center_freq_hz` | 4000–10000 | Center of sibilance band |
+| `threshold_db` | -60–0 | Level above which processing engages |
+| `ratio` | 0.25–20 | < 1 = boost, > 1 = cut, 1 = off |
+| `bandwidth_hz` | 500–4000 | Width of monitored band |
+| `attack_ms` | 0.1–50 | Reaction speed |
+| `release_ms` | 10–500 | Recovery speed |
+
+Total: 6 parameters.
+
+### CLI
+
+```
+faurge-esser <input.wav> <output.wav> [options]
+  --center 7200 --threshold -30 --ratio 5.0 --bandwidth 2000 --attack 1 --release 100
+  --json --verbose
+```
+
+### Degradation mode
+
+`faurge-esser-ruin <input.wav> <output.wav>`
+Harsh sss boost (ratio < 1) or complete sibilance cut (ratio > 10, low threshold).
+
+---
+
+## Plugin 4: Limiter
+
+Safety ceiling — prevents peaks from exceeding a hard or soft limit.
+
+### Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `ceiling_db` | -12–0 | Maximum allowed peak level |
+| `release_ms` | 1–500 | Recovery speed after gain reduction |
+| `lookahead_ms` | 0–10 | Lookahead for anticipatory limiting |
+| `clip_mode` | {soft, hard} | Soft = knee'd saturation, hard = brickwall |
+| `stereo_link` | 0–1 | 0 = independent, 1 = linked |
+| `oversampling` | 1–4 | Anti-alias oversampling factor |
+
+Total: 6 parameters.
+
+### CLI
+
+```
+faurge-limiter <input.wav> <output.wav> [options]
+  --ceiling -1.0 --release 50 --lookahead 2 --mode soft --link 1.0 --oversample 2
+  --json --verbose
+```
+
+### Degradation mode
+
+`faurge-limiter-ruin <input.wav> <output.wav>`
+Extremely low ceiling with hard clip mode.
+
+---
+
+## Plugin 5: Saturator
+
+Harmonic coloration — adds controlled distortion for character.
+
+### Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `drive_db` | 0–24 | Pre-saturation gain |
+| `mix` | 0–1 | Wet/dry blend |
+| `type` | {tube, tape, diode, asymmetric} | 4-way saturation curve |
+| `highpass_freq` | 20–500 | HPF before saturation (prevents muddy bass) |
+| `lowpass_freq` | 2000–20000 | LPF after saturation (tames harsh harmonics) |
+| `oversampling` | 1–4 | Anti-alias oversampling |
+| `output_trim_db` | -12–+12 | Post-saturation level |
+
+Total: 7 parameters.
+
+### CLI
+
+```
+faurge-saturate <input.wav> <output.wav> [options]
+  --drive 6.0 --mix 0.4 --type tube --hpf 100 --lpf 16000 --oversample 2 --trim -1.0
+  --json --verbose
+```
+
+### Degradation mode
+
+`faurge-saturate-ruin <input.wav> <output.wav>`
+Extreme drive with asymmetric clipping to destroy clarity.
+
+---
+
+## Plugin 6: Transient Shaper
+
+Envelope control — shapes attack and sustain of individual events.
+
+### Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `attack_gain_db` | -24–+24 | Boost or cut the attack transient |
+| `sustain_gain_db` | -24–+24 | Boost or cut the sustain tail |
+| `attack_time_ms` | 0.1–50 | How long until a transient is considered "attack" |
+| `release_time_ms` | 10–500 | How fast to return to unity after a transient |
+| `sensitivity` | -30–0 | Minimum transient level to trigger processing |
+| `mix` | 0–1 | Wet/dry blend |
+
+Total: 6 parameters.
+
+### CLI
+
+```
+faurge-transient <input.wav> <output.wav> [options]
+  --attack-gain +3.0 --sustain-gain -2.0 --attack-time 5 --release-time 200 --sensitivity -20 --mix 0.8
+  --json --verbose
+```
+
+### Degradation mode
+
+`faurge-transient-ruin <input.wav> <output.wav>`
+Extreme attack boost + sustain cut to make audio percussive and unnatural, or the reverse to mush it out.
+
+---
+
+## Plugin 7: Gain
+
+Final loudness and balance.
+
+### Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `gain_db` | -12–+12 | Post-processing gain offset |
+| `stereo_balance` | -1–1 | -1 = full left, 0 = center, 1 = full right |
+
+Total: 2 parameters.
+
+### CLI
+
+```
+faurge-gain <input.wav> <output.wav> [options]
+  --gain +2.5 --balance 0 --json --verbose
+```
+
+### Degradation mode
+
+`faurge-gain-ruin <input.wav> <output.wav>`
+Extreme gain (+12 dB clipping or -12 dB near-silence), hard-pan or swap channels.
+
+---
+
+## Summary: Ursula's Action Space
+
+| Plugin | Parameters | Total dims |
+|--------|-----------|------------|
+| Parametric EQ (31 bands) | freq, gain, q, filter_type, stereo_skew, dynamic_depth × 31 | 186 |
+| Compressor | threshold, ratio, attack, release, knee, lookahead, hold, wet_dry, stereo_link, sidechain_hp, sidechain_lp, saturate_drive, output_trim, detector_type | 14 |
+| Esser | center_freq, threshold, ratio, bandwidth, attack, release | 6 |
+| Limiter | ceiling, release, lookahead, clip_mode, stereo_link, oversampling | 6 |
+| Saturator | drive, mix, type, highpass_freq, lowpass_freq, oversampling, output_trim | 7 |
+| Transient Shaper | attack_gain, sustain_gain, attack_time, release_time, sensitivity, mix | 6 |
+| Gain | gain_db, stereo_balance | 2 |
+| **Total** | | **227** |
+
+Each parameter is normalized to [-1, 1] and unscaled to its real range by the RL environment wrapper. Categorical parameters (filter_type, detector_type, clip_mode, saturate_type) use softmax over their options.
+
+227D is a large action space. SAC with automatic entropy tuning handles it, but expect extended training time. The curriculum warmup (single-clip → multi-clip) becomes critical — the network must learn the causal map of 227 knobs before it has to generalize across content variation.
+
+---
+
+## Processing Order
+
+```
+Input → EQ → Compressor → Esser → Saturator → Limiter → Transient Shaper → Gain → Output
+```
+
+This order mirrors typical studio practice: spectral shaping first, then dynamics, then sibilance, then harmonic coloration, then safety ceiling, then envelope finishing, then final level.
+
+---
+
+## Build & File Structure (per plugin)
+
+Each plugin follows the exciter layout exactly:
+
+```
+plugins/<name>/
 ├── CMakeLists.txt
-├── README.md
 ├── include/faurge/
-│   ├── crossover_filter.hpp     # LR4 crossover utility
-│   ├── exciter.hpp              # Main public API
-│   ├── exciter_types.hpp        # Config + Result structs
-│   ├── exciter_metrics.hpp      # JSON + summary reporting
-│   ├── high_band.hpp            # High-frequency saturator
-│   └── low_band.hpp             # Low-frequency sub-octave synth
+│   ├── <name>.hpp           # Main public API
+│   ├── <name>_types.hpp     # Config + Result structs
+│   └── <name>_metrics.hpp   # JSON output
 ├── src/
-│   ├── crossover_filter.cpp
-│   ├── exciter.cpp              # Orchestrator + WAV I/O
-│   ├── exciter_metrics.cpp
-│   ├── high_band.cpp
-│   ├── low_band.cpp
-│   └── main.cpp                 # CLI entry point
+│   ├── <name>.cpp           # Orchestrator + WAV I/O
+│   ├── <name>_metrics.cpp
+│   └── main.cpp             # CLI entry point
 └── test/
-    ├── generate_pairs.cpp       # Training pair generator
-    ├── test_high_band.cpp       # High-band unit tests
-    ├── test_low_band.cpp        # Low-band unit tests
-    ├── test_pipeline.cpp        # Full integration tests
-    └── test_metrics.cpp         # Metrics correctness tests
+    └── generate_pairs.cpp   # Training pair generator (degradation helper)
 ```
+
+Dependencies: C++17, libsndfile, no additional libraries.
+
+---
+
+## Dual-Use Pipeline
+
+```
+Kaggle (training data gen)
+  ┌──────────────────────────────────────┐
+  │  pristine.wav                         │
+  │    → faurge-eq-ruin (random bands)    │
+  │    → faurge-compress-ruin (heavy)     │
+  │    → faurge-esser-ruin (harsh sss)    │
+  │    → faurge-saturate-ruin (drive)     │
+  │    → faurge-limiter-ruin (crush)      │
+  │    → faurge-transient-ruin (shape)    │
+  │    → faurge-gain-ruin (jitter)        │
+  │    → degraded.wav                     │
+  └──────────────────────────────────────┘
+  Output: {degraded.wav, pristine.wav} pair with metrics
+
+RL Gym Env (training loop)
+  ┌──────────────────────────────────────┐
+  │  Ursula outputs: [227 params]         │
+  │    → faurge-eq      (apply params)    │
+  │    → faurge-compress (apply params)   │
+  │    → faurge-esser   (apply params)    │
+  │    → faurge-saturate (apply params)   │
+  │    → faurge-limiter (apply params)    │
+  │    → faurge-transient (apply params)  │
+  │    → faurge-gain    (apply params)    │
+  │    → processed.wav                    │
+  │  Reward = -MSE(M_result, M_ref)       │
+  └──────────────────────────────────────┘
+
+Inference (live pipe)
+  ┌──────────────────────────────────────┐
+  │  Ursula (frozen ONNX): [227 params]   │
+  │    → same 7 plugins in sequence       │
+  │    → A_dsp → Genesis                  │
+  └──────────────────────────────────────┘
+```
+
+
+---
+
+## Training Pair Policy
+
+### Same-gender (or same-cluster) pairing
+
+Sources and references must share gender: male → male, female → female. Cross-gender pairs teach voice morphing (e.g., boost lows to make a female voice approximate a male LTAS), not restoration.
+
+**Refinement — LTAS centroid clustering:** Within-gender voice range is still wide (bass vs tenor, alto vs soprano). If artifacts appear, cluster speakers by their LTAS centroid (the average frequency of their spectral energy) and enforce pairs within the same cluster. This naturally groups baritones, tenors, altos, sopranos, etc., tighter than binary gender alone.
+
+### Baseline similarity ceiling
+
+Before training, establish the **identity floor**:
+
+1. Take good recordings of speaker A and speaker B (same gender/cluster).
+2. Compute 67D metrics for each.
+3. Measure MSE(M(A_i), M(B_j)) across all cross-speaker combinations.
+4. Average → identity floor.
+
+This is the irreducible metric distance between two different humans producing good audio. During training, clamp the reward:
+
+```
+reward = -soft_clamp(MSE - floor, k)
+```
+
+Where `soft_clamp(x, k)` is a smooth sigmoid-like transition (e.g., `k * tanh(x/k)`) rather than a hard `max(x, 0)`. This keeps the gradient smooth near the floor — a hard cutoff at 0 would kill gradient signal abruptly once MSE dips below the floor, preventing the network from learning to improve dimensions that still have room.
+
+The single scalar floor works because MSE distributes gradient per-component: if LTAS MSE is 0.02 (above floor) and LUFS MSE is 0.000 (below floor), the gradient vanishes for LUFS while LTAS continues to be optimized.
+
+---
+
+## Candidate Metrics (Future Expansion)
+
+Potential metrics to add if the initial 67D observation space proves insufficient:
+
+| Metric | Dims | What it captures |
+|--------|------|-----------------|
+| Spectral centroid | 1 | Perceptual brightness / HF balance |
+| Spectral flatness | 1 | Noise-likeness vs tonality |
+| Noise floor estimate | 1 | Background hiss level |
+| Band energy ratios (3–5 bands) | 3–5 | Coarse spectral balance, more interpretable than full LTAS |
+
+Do not add in the first training pass. Wait until Ursula converges, then evaluate failure cases: if output sounds "off" on a specific perceptual dimension despite good LTAS/LUFS/DR scores, that dimension tells you which metric was missing.
