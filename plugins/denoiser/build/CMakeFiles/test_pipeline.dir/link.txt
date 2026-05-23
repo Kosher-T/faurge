@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_pipeline.dir/test/test_pipeline.cpp.o CMakeFiles/test_pipeline.dir/src/denoiser.cpp.o CMakeFiles/test_pipeline.dir/src/noise_estimator.cpp.o CMakeFiles/test_pipeline.dir/src/denoise_metrics.cpp.o -o test_pipeline  /home/itorousa/Documents/Code/faurge/plugins/denoiser/rust/target/release/libdf_bridge.a -lsndfile -lpthread -ldl -lm 

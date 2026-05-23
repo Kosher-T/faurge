@@ -1,8 +1,0 @@
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/faurge-declip.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/faurge-generate-clipped.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/test_detector.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/test_pipeline.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/test_reconstructor.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/test.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/edit_cache.dir
-/home/itorousa/Documents/Code/faurge/plugins/declipper/build/CMakeFiles/rebuild_cache.dir

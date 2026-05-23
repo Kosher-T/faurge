@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_detector.dir/test/test_detector.cpp.o CMakeFiles/test_detector.dir/src/clip_detector.cpp.o CMakeFiles/test_detector.dir/src/declipper.cpp.o CMakeFiles/test_detector.dir/src/metrics.cpp.o CMakeFiles/test_detector.dir/src/post_filter.cpp.o CMakeFiles/test_detector.dir/src/reconstructor.cpp.o -o test_detector  -lsndfile 
