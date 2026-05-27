@@ -52,3 +52,8 @@ RAM_BUDGET_LIMIT_MB = 4096        # CPU-only RAM ceiling
 BUDGET_INFERENCE_STEPS = 5        # Inference steps during profiling
 BUDGET_WARMUP_STEPS = 2           # Warmup steps before measurement
 BUDGET_ABORT_ON_EXCEED = True     # Halt the build on budget overrun
+
+# --- Ursula Cluster Conditioning ---
+CLUSTER_N_CLUSTERS = 8             # K clusters + 1 unknown slot
+CLUSTER_CENTROIDS_PATH = ""        # Path to cluster_centroids.json (auto-resolved to data/)
+CLUSTER_THRESHOLD = None           # Auto-computed from centroids if None

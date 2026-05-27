@@ -128,6 +128,20 @@
     },
     "BUDGET_ABORT_ON_EXCEED": {
       "type": "boolean"
+    },
+    "CLUSTER_N_CLUSTERS": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 32,
+      "default": 8
+    },
+    "CLUSTER_CENTROIDS_PATH": {
+      "type": "string",
+      "default": "data/cluster_centroids.json"
+    },
+    "CLUSTER_THRESHOLD": {
+      "type": ["number", "null"],
+      "default": null
     }
   },
   "required": [

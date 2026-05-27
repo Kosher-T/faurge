@@ -107,6 +107,13 @@ BUDGET_INFERENCE_STEPS = _load_int("FAURGE_BUDGET_INFERENCE_STEPS", defaults.BUD
 BUDGET_WARMUP_STEPS = _load_int("FAURGE_BUDGET_WARMUP_STEPS", defaults.BUDGET_WARMUP_STEPS)
 BUDGET_ABORT_ON_EXCEED = _load_bool("FAURGE_BUDGET_ABORT_ON_EXCEED", defaults.BUDGET_ABORT_ON_EXCEED)
 
+# --- Ursula Cluster Conditioning ---
+CLUSTER_N_CLUSTERS = _load_int("FAURGE_CLUSTER_N_CLUSTERS", defaults.CLUSTER_N_CLUSTERS)
+_raw_centroids = _load_str("FAURGE_CLUSTER_CENTROIDS_PATH", defaults.CLUSTER_CENTROIDS_PATH)
+CLUSTER_CENTROIDS_PATH = Path(_raw_centroids) if _raw_centroids else DIRS["DATA"] / "cluster_centroids.json"
+_raw_threshold = os.getenv("FAURGE_CLUSTER_THRESHOLD")
+CLUSTER_THRESHOLD = float(_raw_threshold) if _raw_threshold is not None else defaults.CLUSTER_THRESHOLD
+
 
 # ==============================================================================
 # --- Configuration Validation ---
@@ -151,6 +158,9 @@ def validate_settings():
         "BUDGET_INFERENCE_STEPS": BUDGET_INFERENCE_STEPS,
         "BUDGET_WARMUP_STEPS": BUDGET_WARMUP_STEPS,
         "BUDGET_ABORT_ON_EXCEED": BUDGET_ABORT_ON_EXCEED,
+        "CLUSTER_N_CLUSTERS": CLUSTER_N_CLUSTERS,
+        "CLUSTER_CENTROIDS_PATH": str(CLUSTER_CENTROIDS_PATH),
+        "CLUSTER_THRESHOLD": CLUSTER_THRESHOLD,
     }
 
     try:

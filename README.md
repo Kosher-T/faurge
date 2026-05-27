@@ -38,7 +38,7 @@ graph TD
         end
         
         subgraph Agents ["Stateless AI Actuators (ONNX Inference)"]
-            Ursula[Ursula: DSP Agent - 134D metrics in, 227D params out]
+            Ursula[Ursula: DSP Agent - 143D metrics+cluster in, 227D params out]
             Genesis[Genesis: DDSP Engine - 2x512D CLAP in, ir.wav out]
         end
     end
@@ -120,8 +120,10 @@ To prevent stereo image drift, transient blurring, or comb filtering while still
 
 ## 📊 Physical Metric Vector (67D Space)
 
-Ursula acts on a **134-dimensional input** consisting of the concatenated metric vectors of the current audio and reference audio:
-$$\text{Input} = M_{current} \mathbin{\Vert} M_{ref} \quad (M \in \mathbb{R}^{67})$$
+Ursula acts on a **143-dimensional input** consisting of the concatenated metric vectors of the current audio, reference audio, and a cluster identity one-hot:
+$$\text{Input} = M_{current} \mathbin{\Vert} M_{ref} \mathbin{\Vert} C_{cluster} \quad (M \in \mathbb{R}^{67},\; C \in \mathbb{R}^{9})$$
+
+The 9D cluster vector is a one-hot encoding (K=8 clusters + 1 unknown slot) assigned by Fabian via nearest-centroid matching against saved cluster centroids from Phase 1 of training.
 
 Each 67-dimensional vector $M$ represents a physical snapshot of the audio clip:
 * **LTAS (Long-Term Average Spectrum) — 64 Dimensions**: Log-power spectrum mapped to the Bark Scale (spaced between 20 Hz and 20 kHz) to identify spectral peaks, dips, and slopes.
