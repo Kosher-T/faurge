@@ -20,7 +20,7 @@ np.random.seed(42)
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # Phase 1 outputs — attach ursula_cluster_data as Kaggle dataset
 INPUT = Path('/kaggle/input')
-CLUSTER_DATA = INPUT / 'ursula_cluster_data'
+CLUSTER_DATA = INPUT / 'notebooks/itorousa/01-cluster-speakers/ursula_cluster_data'
 
 # Pristine audio
 PRISTINE = {

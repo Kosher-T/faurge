@@ -1,4 +1,44 @@
 # ══════════════════════════════════════════════════════════════════════════════
+# Cache Functions
+# ══════════════════════════════════════════════════════════════════════════════
+
+def savePairList(pairs, src_counts, ref_counts, cache_path):
+    """Save pair list and balance counts to JSON for deterministic re-runs."""
+    data = {
+        'pairs': pairs,
+        'source_counts': dict(src_counts),
+        'ref_counts': dict(ref_counts),
+    }
+    with open(cache_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def loadPairList(cache_path):
+    """Load cached pair list and balance counts."""
+    with open(cache_path, 'r') as f:
+        data = json.load(f)
+    return data['pairs'], defaultdict(int, data['source_counts']), defaultdict(int, data['ref_counts'])
+
+
+def pairExists(pair_id, output_dir):
+    """Check if a pair has already been processed (has degraded.wav)."""
+    pair_dir = output_dir / 'pairs' / f'{pair_id:08d}'
+    return (pair_dir / 'degraded.wav').exists()
+
+
+def getCompletedPairs(output_dir):
+    """Return set of pair_ids that already have degraded.wav."""
+    pairs_dir = output_dir / 'pairs'
+    if not pairs_dir.exists():
+        return set()
+    completed = set()
+    for d in pairs_dir.iterdir():
+        if d.is_dir() and (d / 'degraded.wav').exists():
+            completed.add(int(d.name))
+    return completed
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Audio Utilities
 # ══════════════════════════════════════════════════════════════════════════════
 

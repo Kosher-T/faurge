@@ -18,23 +18,39 @@ else:
 total_clips = sum(len(v) for v in all_clips.values())
 print(f"  {total_clips} clips from {len(all_clips)} speakers")
 
-# ── Step 3: Generate pair list ──
+# ── Step 3: Generate or load pair list (with cache) ──
 print("\n═══ Step 3: Generating pairs ═══")
-pairs, src_counts, ref_counts = generatePairs(all_clips, clusters, N_PAIRS)
-print(f"  {len(pairs)} pairs generated")
+PAIRS_CACHE = DATASET_DIR / 'pairs.json'
+if PAIRS_CACHE.exists():
+    print(f"Found cached pair list at {PAIRS_CACHE}")
+    pairs, src_counts, ref_counts = loadPairList(PAIRS_CACHE)
+    print(f"  Loaded {len(pairs)} pairs from cache")
+else:
+    pairs, src_counts, ref_counts = generatePairs(all_clips, clusters, N_PAIRS)
+    savePairList(pairs, src_counts, ref_counts, PAIRS_CACHE)
+    print(f"  Generated {len(pairs)} pairs")
 print(f"  Source balance: min={min(src_counts.values())}, max={max(src_counts.values())}")
 print(f"  Ref balance: min={min(ref_counts.values())}, max={max(ref_counts.values())}")
 
-# ── Step 4: Process pairs in batches ──
+# ── Step 4: Process pairs in batches (with resume) ──
 print("\n═══ Step 4: Processing degradation pipeline ═══")
+completed_pairs = getCompletedPairs(DATASET_DIR)
+print(f"  Found {len(completed_pairs)} already-completed pairs")
+
 t_start = time.time()
-processed = 0
+processed = len(completed_pairs)
 skipped = 0
 
 for batch_start in range(0, len(pairs), PAIRS_PER_BATCH):
     batch = pairs[batch_start:batch_start + PAIRS_PER_BATCH]
 
     for pair in batch:
+        pair_id = pair['pair_id']
+
+        # Skip if already processed
+        if pair_id in completed_pairs:
+            continue
+
         # Load source and reference clips from memory
         src_clip = all_clips[pair['source_speaker']][pair['src_clip_idx']]
         ref_clip = all_clips[pair['ref_speaker']][pair['ref_clip_idx']]
@@ -46,17 +62,17 @@ for batch_start in range(0, len(pairs), PAIRS_PER_BATCH):
         try:
             degraded = applyDegradation(src_clip, SR, params)
         except Exception as e:
-            print(f"  [WARN] Pair {pair['pair_id']} failed: {e}")
+            print(f"  [WARN] Pair {pair_id} failed: {e}")
             skipped += 1
             continue
 
         # Save pair
-        savePair(pair['pair_id'], degraded, ref_clip, params, DATASET_DIR)
+        savePair(pair_id, degraded, ref_clip, params, DATASET_DIR)
         processed += 1
 
     # Progress report
     elapsed = time.time() - t_start
-    rate = processed / elapsed if elapsed > 0 else 0
+    rate = (processed - len(completed_pairs)) / elapsed if elapsed > 0 else 0
     print(f"  Batch {batch_start // PAIRS_PER_BATCH + 1}: "
           f"{processed}/{len(pairs)} pairs, "
           f"{rate:.1f} pairs/sec, "
