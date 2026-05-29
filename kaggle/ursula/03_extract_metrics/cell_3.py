@@ -85,11 +85,13 @@ for idx in range(start_idx, len(chosen)):
     torch.save(torch.from_numpy(metrics_tensor), pt_path)
 
     # Record paths row
+    cluster_id_reference = clusters[entry['speaker_id']]['cluster']
     paths_rows.append({
         'pair_id': pair_id,
         'degraded_path': str(degraded_path),
         'reference_path': entry['path'],
-        'cluster_id': cluster_id_degraded,
+        'cluster_id_degraded': cluster_id_degraded,
+        'cluster_id_reference': cluster_id_reference,
     })
 
     processed += 1
@@ -127,7 +129,8 @@ print("=" * 60)
 
 csv_path = METRICS_DIR / 'paths.csv'
 with open(csv_path, 'w', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=['pair_id', 'degraded_path', 'reference_path', 'cluster_id'])
+    writer = csv.DictWriter(f, fieldnames=['pair_id', 'degraded_path', 'reference_path',
+                                              'cluster_id_degraded', 'cluster_id_reference'])
     writer.writeheader()
     writer.writerows(paths_rows)
 print(f"  Wrote {len(paths_rows)} rows → {csv_path}")
