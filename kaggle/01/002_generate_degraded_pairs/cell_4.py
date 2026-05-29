@@ -6,17 +6,17 @@ clusters = json.load(open(CLUSTER_DATA / 'clusters.json'))
 identity_floors = json.load(open(CLUSTER_DATA / 'identity_floors.json'))
 print(f"  Loaded {len(clusters)} speakers, {len(set(c['cluster'] for c in clusters.values()))} clusters")
 
-# ── Step 2: Load and segment all pristine audio (with cache) ──
+# ── Step 2: Load pristine audio (stream to disk) ──
 print("\n═══ Step 2: Loading pristine audio ═══")
-CLIPS_CACHE = DATASET_DIR / 'all_clips_cache.npz'
-if CLIPS_CACHE.exists():
+CLIPS_CACHE = DATASET_DIR / 'clips_cache'
+if (CLIPS_CACHE / 'clip_index.json').exists():
     print(f"Found cached clips at {CLIPS_CACHE}")
-    all_clips = loadAllClipsCache(CLIPS_CACHE, clusters)
 else:
-    all_clips = loadAllClips(PRISTINE, clusters)
-    saveAllClipsCache(all_clips, CLIPS_CACHE)
-total_clips = sum(len(v) for v in all_clips.values())
-print(f"  {total_clips} clips from {len(all_clips)} speakers")
+    print("Building clip cache (streaming to disk)...")
+    buildClipCache(PRISTINE, clusters, CLIPS_CACHE)
+clip_store = ClipStore(CLIPS_CACHE, clusters)
+total_clips = sum(len(clip_store[sid]) for sid in clip_store.keys())
+print(f"  {total_clips} clips from {len(list(clip_store.keys()))} speakers")
 
 # ── Step 3: Generate or load pair list (with cache) ──
 print("\n═══ Step 3: Generating pairs ═══")
@@ -26,7 +26,7 @@ if PAIRS_CACHE.exists():
     pairs, src_counts, ref_counts = loadPairList(PAIRS_CACHE)
     print(f"  Loaded {len(pairs)} pairs from cache")
 else:
-    pairs, src_counts, ref_counts = generatePairs(all_clips, clusters, N_PAIRS)
+    pairs, src_counts, ref_counts = generatePairs(clip_store, clusters, N_PAIRS)
     savePairList(pairs, src_counts, ref_counts, PAIRS_CACHE)
     print(f"  Generated {len(pairs)} pairs")
 print(f"  Source balance: min={min(src_counts.values())}, max={max(src_counts.values())}")
@@ -51,9 +51,9 @@ for batch_start in range(0, len(pairs), PAIRS_PER_BATCH):
         if pair_id in completed_pairs:
             continue
 
-        # Load source and reference clips from memory
-        src_clip = all_clips[pair['source_speaker']][pair['src_clip_idx']]
-        ref_clip = all_clips[pair['ref_speaker']][pair['ref_clip_idx']]
+        # Load source and reference clips on-demand
+        src_clip = clip_store[pair['source_speaker']][pair['src_clip_idx']]
+        ref_clip = clip_store[pair['ref_speaker']][pair['ref_clip_idx']]
 
         # Generate random degradation parameters
         params = generateDegradationParams()
@@ -69,6 +69,11 @@ for batch_start in range(0, len(pairs), PAIRS_PER_BATCH):
         # Save pair
         savePair(pair_id, degraded, ref_clip, params, DATASET_DIR)
         processed += 1
+
+        # Clear clip cache periodically to free memory
+        if processed % 100 == 0:
+            clip_store.clear_cache()
+            gc.collect()
 
     # Progress report
     elapsed = time.time() - t_start

@@ -120,82 +120,168 @@ def normalizeToTarget(audio, sr, target_lufs=-23.0):
     return normalized
 
 
-def loadAllClips(pristine_paths, clusters):
-    """Load, segment, and normalize all pristine audio for speakers in clusters."""
-    all_clips = {}
+def buildClipCache(pristine_paths, clusters, cache_dir):
+    """Stream clips to disk one-by-one. Never holds more than one clip in RAM."""
+    cache_dir = Path(cache_dir)
+    clips_dir = cache_dir / 'clips'
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    index = {}
+    clip_count = 0
 
     for speaker_id, info in clusters.items():
-        clips = []
         # Determine source path based on speaker_id prefix
         if speaker_id.startswith('p225') or speaker_id.startswith('p226') or speaker_id.startswith('p227'):
-            # VCTK speakers
             source_dir = pristine_paths['vctk']
         elif speaker_id.startswith('LJ'):
-            # LJSpeech
             source_dir = pristine_paths['ljspeech']
         elif speaker_id.startswith('daps'):
-            # DAPS
             source_dir = pristine_paths['daps']
         else:
-            # Try VCTK as default
             source_dir = pristine_paths['vctk']
 
-        # Glob audio files for this speaker
-        if source_dir.exists():
-            audio_files = sorted(source_dir.glob(f'**/{speaker_id}*.wav'))
-            if not audio_files:
-                # Try alternative patterns
-                audio_files = sorted(source_dir.glob(f'**/*{speaker_id}*.wav'))
-
-            for audio_path in audio_files:
-                try:
-                    audio, file_sr = sf.read(str(audio_path), dtype='float32')
-                    # Ensure mono
-                    if audio.ndim > 1:
-                        audio = audio.mean(axis=1)
-                    # Resample to target SR
-                    if file_sr != SR:
-                        audio = librosa.resample(audio, orig_sr=file_sr, target_sr=SR)
-                    # Segment into clips
-                    clip_list = segmentClip(audio, SR, CLIP_SEC, CROSSFADE_MS)
-                    for clip in clip_list:
-                        normalized = normalizeToTarget(clip, SR)
-                        clips.append(normalized)
-                except Exception as e:
-                    print(f"  [WARN] Failed to load {audio_path}: {e}")
-                    continue
-
-        if clips:
-            all_clips[speaker_id] = clips
-
-    return all_clips
-
-
-def saveAllClipsCache(all_clips, cache_path):
-    """Save all_clips dict to npz cache."""
-    save_dict = {}
-    metadata = {}
-    for speaker_id, clips in all_clips.items():
-        for clip_idx, clip in enumerate(clips):
-            key = f"{speaker_id}_{clip_idx}"
-            save_dict[key] = clip
-            metadata[key] = {'speaker_id': speaker_id, 'clip_idx': clip_idx}
-    save_dict['_metadata'] = np.array(json.dumps(metadata))
-    np.savez_compressed(str(cache_path), **save_dict)
-
-
-def loadAllClipsCache(cache_path, clusters):
-    """Load all_clips dict from npz cache."""
-    data = np.load(str(cache_path), allow_pickle=True)
-    metadata = json.loads(str(data['_metadata']))
-    all_clips = defaultdict(list)
-    for key, info in metadata.items():
-        if key == '_metadata':
+        if not source_dir.exists():
             continue
-        speaker_id = info['speaker_id']
-        if speaker_id in clusters:
-            all_clips[speaker_id].append(data[key])
-    return dict(all_clips)
+
+        # Exact match: speaker_id.wav, speaker_id_*.wav, or speaker_id-*.wav
+        audio_files = sorted(source_dir.glob(f'**/{speaker_id}.wav'))
+        audio_files += sorted(source_dir.glob(f'**/{speaker_id}_*.wav'))
+        audio_files += sorted(source_dir.glob(f'**/{speaker_id}-*.wav'))
+        # Deduplicate
+        audio_files = sorted(set(audio_files))
+        print(f"  {speaker_id}: {len(audio_files)} files found")
+
+        speaker_clip_idx = 0
+        for audio_path in audio_files:
+            try:
+                audio, file_sr = sf.read(str(audio_path), dtype='float32')
+                if audio.ndim > 1:
+                    audio = audio.mean(axis=1)
+                if file_sr != SR:
+                    audio = librosa.resample(audio, orig_sr=file_sr, target_sr=SR)
+
+                # Segment and save each clip immediately
+                clip_samples = int(SR * CLIP_SEC)
+                crossfade_samples = int(SR * CROSSFADE_MS / 1000)
+                step = clip_samples - crossfade_samples
+                start = 0
+
+                while start + clip_samples <= len(audio):
+                    clip = audio[start:start + clip_samples].copy()
+                    normalized = normalizeToTarget(clip, SR)
+                    key = f"{speaker_id}_{speaker_clip_idx}"
+                    np.save(str(clips_dir / f'{key}.npy'), normalized)
+                    index[key] = {
+                        'speaker_id': speaker_id,
+                        'clip_idx': speaker_clip_idx,
+                        'n_samples': len(normalized),
+                    }
+                    speaker_clip_idx += 1
+                    clip_count += 1
+                    del clip, normalized
+                    start += step
+
+                # Handle last segment
+                if start < len(audio):
+                    remaining = len(audio) - start
+                    if remaining >= clip_samples:
+                        clip = audio[start:start + clip_samples].copy()
+                    else:
+                        clip = np.zeros(clip_samples, dtype=np.float32)
+                        clip[:remaining] = audio[start:start + remaining]
+                    normalized = normalizeToTarget(clip, SR)
+                    key = f"{speaker_id}_{speaker_clip_idx}"
+                    np.save(str(clips_dir / f'{key}.npy'), normalized)
+                    index[key] = {
+                        'speaker_id': speaker_id,
+                        'clip_idx': speaker_clip_idx,
+                        'n_samples': len(normalized),
+                    }
+                    speaker_clip_idx += 1
+                    clip_count += 1
+                    del clip, normalized
+
+                del audio
+            except Exception as e:
+                print(f"  [WARN] Failed to load {audio_path}: {e}")
+                continue
+
+        print(f"  {speaker_id}: {speaker_clip_idx} clips cached")
+        gc.collect()
+
+    with open(cache_dir / 'clip_index.json', 'w') as f:
+        json.dump(index, f)
+
+    print(f"  Total: {clip_count} clips cached to {cache_dir}")
+    return clip_count
+
+
+class ClipStore:
+    """Lazy-loading clip store. Loads clips on-demand from disk."""
+
+    def __init__(self, cache_dir, clusters):
+        self.cache_dir = Path(cache_dir)
+        self.clips_dir = self.cache_dir / 'clips'
+
+        with open(self.cache_dir / 'clip_index.json', 'r') as f:
+            full_index = json.load(f)
+
+        # Filter to speakers in current clusters and build reverse map
+        self.speaker_clips = defaultdict(list)
+        self._clip_cache = {}
+        for key, info in full_index.items():
+            speaker_id = info['speaker_id']
+            if speaker_id in clusters:
+                self.speaker_clips[speaker_id].append(info['clip_idx'])
+
+    def get_clip(self, speaker_id, clip_idx):
+        """Load a single clip on-demand (with small LRU cache)."""
+        key = f"{speaker_id}_{clip_idx}"
+        if key not in self._clip_cache:
+            self._clip_cache[key] = np.load(str(self.clips_dir / f'{key}.npy'))
+            # Evict if cache grows too large (keep last 100)
+            if len(self._clip_cache) > 100:
+                oldest = list(self._clip_cache.keys())[0]
+                del self._clip_cache[oldest]
+        return self._clip_cache[key]
+
+    def __getitem__(self, speaker_id):
+        """Return list-like object for a speaker's clips."""
+        return ClipList(self, speaker_id, self.speaker_clips[speaker_id])
+
+    def __contains__(self, speaker_id):
+        return speaker_id in self.speaker_clips
+
+    def keys(self):
+        return self.speaker_clips.keys()
+
+    def items(self):
+        return ((k, self[k]) for k in self.speaker_clips.keys())
+
+    def clear_cache(self):
+        self._clip_cache.clear()
+
+
+class ClipList:
+    """List-like wrapper that loads clips on-demand."""
+    def __init__(self, store, speaker_id, clip_indices):
+        self._store = store
+        self._speaker_id = speaker_id
+        self._indices = sorted(clip_indices)
+
+    def __len__(self):
+        return len(self._indices)
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            idx = len(self) + idx
+        if idx < 0 or idx >= len(self):
+            raise IndexError(f"Clip index {idx} out of range [0, {len(self)})")
+        return self._store.get_clip(self._speaker_id, self._indices[idx])
+
+    def __iter__(self):
+        for idx in self._indices:
+            yield self._store.get_clip(self._speaker_id, idx)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
