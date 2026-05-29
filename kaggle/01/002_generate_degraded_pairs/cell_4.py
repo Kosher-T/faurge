@@ -22,7 +22,6 @@ else:
     clips = discoverClips(PRISTINE, clusters)
     writeChosenPristine(clips, JSONL_PATH)
     print(f"  Wrote {len(clips)} entries to {JSONL_PATH}")
-    # Read back so chosen entries have pair_id
     chosen = readChosenPristine(JSONL_PATH)
 
 # Summary stats
@@ -52,13 +51,8 @@ for cid in sorted(by_cluster.keys()):
 # Pass 2: Degrade clips and save
 # ══════════════════════════════════════════════════════════════════════════════
 print(f"\n{'=' * 60}")
-print("  PASS 2: Degrading clips")
+print(f"  PASS 2: Degrading clips (MAX_CLIPS={MAX_CLIPS})")
 print("=" * 60)
-
-# Load cluster centroids for metric → cluster assignment
-CENTROIDS_PATH = CLUSTER_DATA / 'cluster_centroids.json'
-centroids, thresholds = loadClusterCentroids(CENTROIDS_PATH)
-print(f"  Loaded {len(centroids)} cluster centroids")
 
 # Check for checkpoint
 CHECKPOINT_PATH = DATASET_DIR / 'checkpoint.json'
@@ -75,8 +69,9 @@ processed = checkpoint.get('processed', len(completed_ids))
 failed = 0
 all_params = {}
 skipped = 0
+target = min(len(chosen), MAX_CLIPS)
 
-for idx in range(start_idx, len(chosen)):
+for idx in range(start_idx, target):
     entry = chosen[idx]
     pair_id = entry['pair_id']
 
@@ -92,16 +87,6 @@ for idx in range(start_idx, len(chosen)):
         failed += 1
         continue
 
-    # Extract 67D metrics → assign cluster_id_pristine
-    try:
-        metrics_pristine = extract_metrics_67d(audio, SR)
-        cluster_id_pristine, is_unknown_pristine = assignCluster(
-            metrics_pristine, centroids, thresholds)
-    except Exception as e:
-        print(f"  [WARN] {pair_id}: metric extraction failed: {e}")
-        failed += 1
-        continue
-
     # Generate degradation params
     params = generateDegradationParams()
 
@@ -113,21 +98,8 @@ for idx in range(start_idx, len(chosen)):
         failed += 1
         continue
 
-    # Extract 67D metrics of degraded → assign cluster_id_degraded
-    try:
-        metrics_degraded = extract_metrics_67d(degraded, SR)
-        cluster_id_degraded, is_unknown_degraded = assignCluster(
-            metrics_degraded, centroids, thresholds)
-    except Exception as e:
-        print(f"  [WARN] {pair_id}: degraded metric extraction failed: {e}")
-        failed += 1
-        continue
-
-    # Add cluster IDs to params
-    params['cluster_id_pristine'] = cluster_id_pristine
-    params['cluster_id_degraded'] = cluster_id_degraded
-    params['is_unknown_pristine'] = is_unknown_pristine
-    params['is_unknown_degraded'] = is_unknown_degraded
+    # Store cluster_id from JSONL (metrics extraction deferred to Phase 3)
+    params['cluster_id_pristine'] = entry['cluster_id']
     params['speaker_id'] = entry['speaker_id']
     params['pristine_path'] = entry['path']
 
@@ -142,12 +114,12 @@ for idx in range(start_idx, len(chosen)):
         continue
 
     # Progress report
-    if processed % 100 == 0:
+    if processed % 10 == 0 or processed == target:
         elapsed = time.time() - t_start
-        rate = (processed - len(completed_ids)) / elapsed if elapsed > 0 else 0
-        print(f"  [{processed}/{len(chosen)}] "
+        rate = processed / elapsed if elapsed > 0 else 0
+        print(f"  [{processed}/{target}] "
               f"{rate:.1f} pairs/sec, "
-              f"{getOutputSizeGB(DATASET_DIR):.1f} GB used, "
+              f"{getOutputSizeGB(DATASET_DIR):.2f} GB used, "
               f"failed: {failed}")
 
     # Checkpoint
@@ -163,13 +135,12 @@ for idx in range(start_idx, len(chosen)):
         print(f"\n  Budget limit reached ({MAX_OUTPUT_GB} GB). Stopping.")
         break
 
-    # Free memory
-    del audio, degraded, metrics_pristine, metrics_degraded
+    del audio, degraded
     gc.collect()
 
 # Final checkpoint
 saveCheckpoint(CHECKPOINT_PATH, {
-    'next_idx': len(chosen),
+    'next_idx': min(target, checkpoint['next_idx'] + (processed - len(completed_ids))),
     'processed': processed,
     'failed': failed,
 })
@@ -183,6 +154,7 @@ print("=" * 60)
 
 clip_stats = {
     'total_discovered': len(chosen),
+    'target_clips': target,
     'by_dataset': dict(by_dataset),
     'by_cluster': {str(k): v for k, v in by_cluster.items()},
     'n_speakers': len(by_speaker),
@@ -197,7 +169,7 @@ with open(DATASET_DIR / 'degradation_params.json', 'w') as f:
 elapsed = time.time() - t_total
 print(f"\n{'=' * 60}")
 print(f"  PHASE 2 COMPLETE — {elapsed / 60:.1f} min")
-print(f"  Discovered: {len(chosen)} clips")
+print(f"  Target: {target} clips")
 print(f"  Processed: {processed} (skipped: {skipped}, failed: {failed})")
 print(f"  Output: {DATASET_DIR}")
 print(f"  Size: {getOutputSizeGB(DATASET_DIR):.2f} GB")

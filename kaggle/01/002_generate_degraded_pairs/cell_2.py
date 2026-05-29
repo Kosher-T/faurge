@@ -28,6 +28,7 @@ HOP_SIZE = 1024
 PAIRS_PER_BATCH = 500
 MAX_OUTPUT_GB = 18.0
 CHECKPOINT_INTERVAL = 100
+MAX_CLIPS = 5  # Curriculum: increase to 30, 100, then full dataset
 
 random.seed(42)
 np.random.seed(42)

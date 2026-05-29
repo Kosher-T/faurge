@@ -154,34 +154,6 @@ def extract_metrics_67d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Cluster Assignment (inlined from core/cluster_assigner.py)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def loadClusterCentroids(centroids_path):
-    """Load cluster centroids and thresholds from JSON."""
-    with open(centroids_path, 'r') as f:
-        data = json.load(f)
-
-    centroids = []
-    thresholds = []
-    for key in sorted(data.keys()):
-        centroids.append(data[key]['centroid_67d'])
-        thresholds.append(data[key]['threshold'])
-
-    return np.array(centroids), np.array(thresholds)
-
-
-def assignCluster(metrics_67d, centroids, thresholds):
-    """Find nearest cluster centroid by MSE. Returns (cluster_id, is_unknown)."""
-    diffs = centroids - metrics_67d.reshape(1, -1)
-    mses = np.mean(diffs ** 2, axis=1)
-    nearest = int(np.argmin(mses))
-    min_mse = float(mses[nearest])
-    is_unknown = min_mse > thresholds[nearest]
-    return (N_CLUSTERS if is_unknown else nearest, is_unknown)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # Clip Discovery (Pass 1)
 # ══════════════════════════════════════════════════════════════════════════════
 
