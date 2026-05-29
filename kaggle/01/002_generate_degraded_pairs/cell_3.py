@@ -1,287 +1,292 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Cache Functions
+# Bark Scale Utilities (from Phase 1)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def savePairList(pairs, src_counts, ref_counts, cache_path):
-    """Save pair list and balance counts to JSON for deterministic re-runs."""
-    data = {
-        'pairs': pairs,
-        'source_counts': dict(src_counts),
-        'ref_counts': dict(ref_counts),
-    }
-    with open(cache_path, 'w') as f:
-        json.dump(data, f, indent=2)
+def hz_to_bark(hz: float) -> float:
+    return 13.0 * np.arctan(0.00076 * hz) + 3.5 * np.arctan((hz / 7500.0) ** 2)
 
 
-def loadPairList(cache_path):
-    """Load cached pair list and balance counts."""
-    with open(cache_path, 'r') as f:
+def bark_to_hz(bark: float) -> float:
+    return 600.0 * np.sinh(bark / 7.0)
+
+
+def create_bark_filterbank(
+    n_bands: int = BARK_N_BANDS,
+    low_hz: float = BARK_LOW_HZ,
+    high_hz: float = BARK_HIGH_HZ,
+    n_fft: int = FFT_SIZE,
+    sr: int = SR,
+) -> np.ndarray:
+    bark_low = hz_to_bark(low_hz)
+    bark_high = hz_to_bark(high_hz)
+    bark_centers = np.linspace(bark_low, bark_high, n_bands)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+
+    filterbank = np.zeros((n_bands, len(freqs)), dtype=np.float64)
+    for i in range(n_bands):
+        center = bark_centers[i]
+        left_edge = bark_low if i == 0 else (bark_centers[i - 1] + center) / 2.0
+        right_edge = bark_high if i == n_bands - 1 else (center + bark_centers[i + 1]) / 2.0
+
+        center_hz = bark_to_hz(center)
+        left_hz = bark_to_hz(left_edge)
+        right_hz = bark_to_hz(right_edge)
+
+        for j, f in enumerate(freqs):
+            if f < left_hz:
+                filterbank[i, j] = 0.0
+            elif left_hz <= f < center_hz and center_hz > left_hz:
+                filterbank[i, j] = (f - left_hz) / (center_hz - left_hz)
+            elif center_hz <= f < right_hz and right_hz > center_hz:
+                filterbank[i, j] = (right_hz - f) / (right_hz - center_hz)
+            elif f >= right_hz:
+                filterbank[i, j] = 0.0
+            else:
+                filterbank[i, j] = 0.0
+
+    return filterbank
+
+
+_BARK_FILTERBANK = create_bark_filterbank()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LUFS (ITU-R BS.1770-4) (from Phase 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _design_k_weighting_filters(sr: int = SR):
+    from scipy.signal import butter
+    sos_pre = butter(1, 1500.0, btype="high", fs=sr, output="sos")
+    f0 = 4000.0
+    gain_db = 3.0
+    gain_lin = 10.0 ** (gain_db / 20.0)
+    sos_rlb = butter(2, f0, btype="high", fs=sr, output="sos")
+    return sos_pre, sos_rlb
+
+
+def compute_lufs_1d(audio: np.ndarray, sr: int = SR) -> float:
+    from scipy.signal import sosfilt
+
+    if len(audio) < sr * 0.1:
+        filtered = sosfilt(_K_WEIGHTING_SOS, audio)
+        mean_sq = np.mean(filtered ** 2)
+        lufs = -0.691 + 10.0 * np.log10(mean_sq + 1e-20)
+        return float(lufs)
+
+    filtered = audio.copy()
+    for sos in _K_WEIGHTING_SOS:
+        filtered = sosfilt(sos, filtered)
+
+    block_size = int(0.4 * sr)
+    hop_size = int(0.1 * sr)
+    n_blocks = max(1, (len(filtered) - block_size) // hop_size + 1)
+
+    block_powers = np.zeros(n_blocks)
+    for i in range(n_blocks):
+        start = i * hop_size
+        end = start + block_size
+        if end > len(filtered):
+            break
+        block = filtered[start:end]
+        block_powers[i] = np.mean(block ** 2)
+
+    abs_gate = 10.0 ** ((-70.0 + 0.691) / 10.0)
+    gated_mask = block_powers >= abs_gate
+
+    if not np.any(gated_mask):
+        return -70.0
+
+    abs_gated_mean = np.mean(block_powers[gated_mask])
+    rel_threshold = abs_gated_mean * (10.0 ** (-10.0 / 10.0))
+    rel_gated_mask = block_powers >= rel_threshold
+
+    if not np.any(rel_gated_mask):
+        return -70.0
+
+    final_mean = np.mean(block_powers[rel_gated_mask])
+    lufs = -0.691 + 10.0 * np.log10(final_mean + 1e-20)
+    return float(lufs)
+
+
+_K_WEIGHTING_SOS = _design_k_weighting_filters(SR)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Crest Factor & ZCR (from Phase 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def compute_crest_factor(audio: np.ndarray) -> float:
+    peak = np.max(np.abs(audio))
+    rms = np.sqrt(np.mean(audio ** 2))
+    return 20.0 * np.log10(peak / (rms + 1e-10))
+
+
+def compute_zcr(audio: np.ndarray) -> float:
+    signs = np.sign(audio)
+    signs[signs == 0] = 1
+    crossings = np.sum(np.abs(np.diff(signs)) > 0)
+    return float(crossings / (2.0 * (len(audio) - 1)))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 67D Metrics Extractor (from Phase 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def compute_ltas_64d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
+    from scipy.signal import stft
+
+    f, t, Zxx = stft(audio, fs=sr, nperseg=FFT_SIZE, noverlap=FFT_SIZE - HOP_SIZE,
+                     window="hann", return_onesided=True)
+    power = np.abs(Zxx) ** 2
+
+    band_energy = _BARK_FILTERBANK @ power
+    mean_energy = np.mean(band_energy, axis=1)
+    ltas = 10.0 * np.log10(mean_energy + 1e-10)
+    return ltas.astype(np.float64)
+
+
+def extract_metrics_67d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
+    ltas = compute_ltas_64d(audio, sr)
+    lufs = np.array([compute_lufs_1d(audio, sr)])
+    crest = np.array([compute_crest_factor(audio)])
+    zcr = np.array([compute_zcr(audio)])
+    return np.concatenate([ltas, lufs, crest, zcr])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Cluster Assignment (inlined from core/cluster_assigner.py)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def loadClusterCentroids(centroids_path):
+    """Load cluster centroids and thresholds from JSON."""
+    with open(centroids_path, 'r') as f:
         data = json.load(f)
-    return data['pairs'], defaultdict(int, data['source_counts']), defaultdict(int, data['ref_counts'])
+
+    centroids = []
+    thresholds = []
+    for key in sorted(data.keys()):
+        centroids.append(data[key]['centroid_67d'])
+        thresholds.append(data[key]['threshold'])
+
+    return np.array(centroids), np.array(thresholds)
 
 
-def pairExists(pair_id, output_dir):
-    """Check if a pair has already been processed (has degraded.wav)."""
-    pair_dir = output_dir / 'pairs' / f'{pair_id:08d}'
-    return (pair_dir / 'degraded.wav').exists()
-
-
-def getCompletedPairs(output_dir):
-    """Return set of pair_ids that already have degraded.wav."""
-    pairs_dir = output_dir / 'pairs'
-    if not pairs_dir.exists():
-        return set()
-    completed = set()
-    for d in pairs_dir.iterdir():
-        if d.is_dir() and (d / 'degraded.wav').exists():
-            completed.add(int(d.name))
-    return completed
+def assignCluster(metrics_67d, centroids, thresholds):
+    """Find nearest cluster centroid by MSE. Returns (cluster_id, is_unknown)."""
+    diffs = centroids - metrics_67d.reshape(1, -1)
+    mses = np.mean(diffs ** 2, axis=1)
+    nearest = int(np.argmin(mses))
+    min_mse = float(mses[nearest])
+    is_unknown = min_mse > thresholds[nearest]
+    return (N_CLUSTERS if is_unknown else nearest, is_unknown)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Audio Utilities
+# Clip Discovery (Pass 1)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def crossfadeSegments(seg1, seg2, crossfade_samples):
-    """Raised cosine crossfade between two adjacent segments."""
-    if crossfade_samples <= 0:
-        return np.concatenate([seg1, seg2])
-    if len(seg1) < crossfade_samples or len(seg2) < crossfade_samples:
-        return np.concatenate([seg1, seg2])
-
-    t = np.linspace(0, np.pi, crossfade_samples, dtype=np.float32)
-    fade_out = 0.5 * (1 + np.cos(t))
-    fade_in = 0.5 * (1 - np.cos(t))
-
-    crossfade = seg1[-crossfade_samples:] * fade_out + seg2[:crossfade_samples] * fade_in
-    return np.concatenate([seg1[:-crossfade_samples], crossfade, seg2[crossfade_samples:]])
-
-
-def segmentClip(audio, sr, clip_sec, crossfade_ms):
-    """Segment long audio into fixed-length windows with crossfade."""
-    clip_samples = int(sr * clip_sec)
-    crossfade_samples = int(sr * crossfade_ms / 1000)
-    total_samples = len(audio)
-
-    if total_samples <= clip_samples:
-        # Pad with zeros if too short
-        padded = np.zeros(clip_samples, dtype=np.float32)
-        padded[:total_samples] = audio[:total_samples]
-        return [padded]
-
+def discoverClips(pristine_paths, clusters, vctk_max=VCTK_MAX_CLIPS_PER_SPEAKER,
+                  ljspeech_max=LJSpeech_MAX_CLIPS, daps_max=DAPS_MAX_CLIPS):
+    """
+    Scan datasets, pick clips per speaker with limits.
+    Returns list of {"path": str, "speaker_id": str, "cluster_id": int}.
+    """
     clips = []
-    step = clip_samples - crossfade_samples
-    start = 0
-    while start + clip_samples <= total_samples:
-        clip = audio[start:start + clip_samples].copy()
-        clips.append(clip)
-        start += step
 
-    # Handle last segment if it doesn't align perfectly
-    if start < total_samples:
-        remaining = total_samples - start
-        if remaining >= clip_samples:
-            clip = audio[start:start + clip_samples].copy()
-        else:
-            clip = np.zeros(clip_samples, dtype=np.float32)
-            clip[:remaining] = audio[start:start + remaining]
-        clips.append(clip)
+    # VCTK: speakers starting with 'p'
+    vctk_root = pristine_paths['vctk']
+    if vctk_root.exists():
+        for speaker_dir in sorted(vctk_root.iterdir()):
+            if not speaker_dir.is_dir():
+                continue
+            speaker_id = speaker_dir.name
+            if speaker_id not in clusters:
+                continue
 
-    # Apply crossfade between adjacent clips
-    if len(clips) > 1:
-        result = [clips[0]]
-        for i in range(1, len(clips)):
-            result[-1] = crossfadeSegments(result[-1], clips[i], crossfade_samples)
-        # The crossfadeSegments function combines segments, so we take the final result
-        return [result[-1]] if len(result) == 1 else result
+            wav_files = sorted(speaker_dir.glob("*.wav"))
+            if not wav_files:
+                continue
+
+            # Sample up to vctk_max clips
+            if len(wav_files) > vctk_max:
+                wav_files = random.sample(wav_files, vctk_max)
+
+            cluster_id = clusters[speaker_id]['cluster']
+            for wav_path in wav_files:
+                clips.append({
+                    'path': str(wav_path),
+                    'speaker_id': speaker_id,
+                    'cluster_id': cluster_id,
+                })
+
+    # LJSpeech: single speaker LJ001
+    ljspeech_root = pristine_paths['ljspeech']
+    if ljspeech_root.exists():
+        wav_files = sorted(ljspeech_root.glob("*.wav"))
+        if wav_files and "LJ001" in clusters:
+            if len(wav_files) > ljspeech_max:
+                wav_files = random.sample(wav_files, ljspeech_max)
+
+            cluster_id = clusters["LJ001"]['cluster']
+            for wav_path in wav_files:
+                clips.append({
+                    'path': str(wav_path),
+                    'speaker_id': 'LJ001',
+                    'cluster_id': cluster_id,
+                })
+
+    # DAPS: speakers with f*/m* prefix
+    daps_root = pristine_paths['daps']
+    if daps_root.exists():
+        daps_files = []
+        for wav_file in sorted(daps_root.rglob("*.wav")):
+            speaker_id = wav_file.stem.split("_")[0]
+            if speaker_id in clusters:
+                daps_files.append((wav_file, speaker_id))
+
+        if daps_max and len(daps_files) > daps_max:
+            daps_files = random.sample(daps_files, daps_max)
+
+        for wav_path, speaker_id in daps_files:
+            cluster_id = clusters[speaker_id]['cluster']
+            clips.append({
+                'path': str(wav_path),
+                'speaker_id': speaker_id,
+                'cluster_id': cluster_id,
+            })
 
     return clips
 
 
-def normalizeToTarget(audio, sr, target_lufs=-23.0):
-    """Normalize audio to target LUFS with peak-clip safety."""
-    # Simple RMS-based normalization as proxy for LUFS
-    rms = np.sqrt(np.mean(audio.astype(np.float32) ** 2))
-    if rms < 1e-10:
-        return audio.astype(np.float32)
+# ══════════════════════════════════════════════════════════════════════════════
+# JSONL Read/Write
+# ══════════════════════════════════════════════════════════════════════════════
 
-    # Convert target LUFS to approximate RMS
-    # LUFS ≈ -0.691 + 10*log10(rms^2) for simple signals
-    target_rms = 10 ** ((target_lufs + 0.691) / 20)
-    gain = target_rms / rms
-
-    normalized = audio.astype(np.float32) * gain
-
-    # Peak-clip safety
-    peak = np.max(np.abs(normalized))
-    if peak > 0.99:
-        normalized *= 0.99 / peak
-
-    return normalized
+def writeChosenPristine(clips, output_path):
+    """Write clip list to JSONL file."""
+    with open(output_path, 'w') as f:
+        for i, clip in enumerate(clips, 1):
+            entry = {
+                'pair_id': f'{i:08d}',
+                'path': clip['path'],
+                'speaker_id': clip['speaker_id'],
+                'cluster_id': clip['cluster_id'],
+            }
+            f.write(json.dumps(entry) + '\n')
 
 
-def buildClipCache(pristine_paths, clusters, cache_dir):
-    """Stream clips to disk one-by-one. Never holds more than one clip in RAM."""
-    cache_dir = Path(cache_dir)
-    clips_dir = cache_dir / 'clips'
-    clips_dir.mkdir(parents=True, exist_ok=True)
-
-    index = {}
-    clip_count = 0
-
-    for speaker_id, info in clusters.items():
-        # Determine source path based on speaker_id prefix
-        if speaker_id.startswith('p225') or speaker_id.startswith('p226') or speaker_id.startswith('p227'):
-            source_dir = pristine_paths['vctk']
-        elif speaker_id.startswith('LJ'):
-            source_dir = pristine_paths['ljspeech']
-        elif speaker_id.startswith('daps'):
-            source_dir = pristine_paths['daps']
-        else:
-            source_dir = pristine_paths['vctk']
-
-        if not source_dir.exists():
-            continue
-
-        # Exact match: speaker_id.wav, speaker_id_*.wav, or speaker_id-*.wav
-        audio_files = sorted(source_dir.glob(f'**/{speaker_id}.wav'))
-        audio_files += sorted(source_dir.glob(f'**/{speaker_id}_*.wav'))
-        audio_files += sorted(source_dir.glob(f'**/{speaker_id}-*.wav'))
-        # Deduplicate
-        audio_files = sorted(set(audio_files))
-        print(f"  {speaker_id}: {len(audio_files)} files found")
-
-        speaker_clip_idx = 0
-        for audio_path in audio_files:
-            try:
-                audio, file_sr = sf.read(str(audio_path), dtype='float32')
-                if audio.ndim > 1:
-                    audio = audio.mean(axis=1)
-                if file_sr != SR:
-                    audio = librosa.resample(audio, orig_sr=file_sr, target_sr=SR)
-
-                # Segment and save each clip immediately
-                clip_samples = int(SR * CLIP_SEC)
-                crossfade_samples = int(SR * CROSSFADE_MS / 1000)
-                step = clip_samples - crossfade_samples
-                start = 0
-
-                while start + clip_samples <= len(audio):
-                    clip = audio[start:start + clip_samples].copy()
-                    normalized = normalizeToTarget(clip, SR)
-                    key = f"{speaker_id}_{speaker_clip_idx}"
-                    np.save(str(clips_dir / f'{key}.npy'), normalized)
-                    index[key] = {
-                        'speaker_id': speaker_id,
-                        'clip_idx': speaker_clip_idx,
-                        'n_samples': len(normalized),
-                    }
-                    speaker_clip_idx += 1
-                    clip_count += 1
-                    del clip, normalized
-                    start += step
-
-                # Handle last segment
-                if start < len(audio):
-                    remaining = len(audio) - start
-                    if remaining >= clip_samples:
-                        clip = audio[start:start + clip_samples].copy()
-                    else:
-                        clip = np.zeros(clip_samples, dtype=np.float32)
-                        clip[:remaining] = audio[start:start + remaining]
-                    normalized = normalizeToTarget(clip, SR)
-                    key = f"{speaker_id}_{speaker_clip_idx}"
-                    np.save(str(clips_dir / f'{key}.npy'), normalized)
-                    index[key] = {
-                        'speaker_id': speaker_id,
-                        'clip_idx': speaker_clip_idx,
-                        'n_samples': len(normalized),
-                    }
-                    speaker_clip_idx += 1
-                    clip_count += 1
-                    del clip, normalized
-
-                del audio
-            except Exception as e:
-                print(f"  [WARN] Failed to load {audio_path}: {e}")
-                continue
-
-        print(f"  {speaker_id}: {speaker_clip_idx} clips cached")
-        gc.collect()
-
-    with open(cache_dir / 'clip_index.json', 'w') as f:
-        json.dump(index, f)
-
-    print(f"  Total: {clip_count} clips cached to {cache_dir}")
-    return clip_count
-
-
-class ClipStore:
-    """Lazy-loading clip store. Loads clips on-demand from disk."""
-
-    def __init__(self, cache_dir, clusters):
-        self.cache_dir = Path(cache_dir)
-        self.clips_dir = self.cache_dir / 'clips'
-
-        with open(self.cache_dir / 'clip_index.json', 'r') as f:
-            full_index = json.load(f)
-
-        # Filter to speakers in current clusters and build reverse map
-        self.speaker_clips = defaultdict(list)
-        self._clip_cache = {}
-        for key, info in full_index.items():
-            speaker_id = info['speaker_id']
-            if speaker_id in clusters:
-                self.speaker_clips[speaker_id].append(info['clip_idx'])
-
-    def get_clip(self, speaker_id, clip_idx):
-        """Load a single clip on-demand (with small LRU cache)."""
-        key = f"{speaker_id}_{clip_idx}"
-        if key not in self._clip_cache:
-            self._clip_cache[key] = np.load(str(self.clips_dir / f'{key}.npy'))
-            # Evict if cache grows too large (keep last 100)
-            if len(self._clip_cache) > 100:
-                oldest = list(self._clip_cache.keys())[0]
-                del self._clip_cache[oldest]
-        return self._clip_cache[key]
-
-    def __getitem__(self, speaker_id):
-        """Return list-like object for a speaker's clips."""
-        return ClipList(self, speaker_id, self.speaker_clips[speaker_id])
-
-    def __contains__(self, speaker_id):
-        return speaker_id in self.speaker_clips
-
-    def keys(self):
-        return self.speaker_clips.keys()
-
-    def items(self):
-        return ((k, self[k]) for k in self.speaker_clips.keys())
-
-    def clear_cache(self):
-        self._clip_cache.clear()
-
-
-class ClipList:
-    """List-like wrapper that loads clips on-demand."""
-    def __init__(self, store, speaker_id, clip_indices):
-        self._store = store
-        self._speaker_id = speaker_id
-        self._indices = sorted(clip_indices)
-
-    def __len__(self):
-        return len(self._indices)
-
-    def __getitem__(self, idx):
-        if idx < 0:
-            idx = len(self) + idx
-        if idx < 0 or idx >= len(self):
-            raise IndexError(f"Clip index {idx} out of range [0, {len(self)})")
-        return self._store.get_clip(self._speaker_id, self._indices[idx])
-
-    def __iter__(self):
-        for idx in self._indices:
-            yield self._store.get_clip(self._speaker_id, idx)
+def readChosenPristine(jsonl_path):
+    """Read clip list from JSONL file. Handles missing pair_id by generating from index."""
+    entries = []
+    with open(jsonl_path, 'r') as f:
+        for i, line in enumerate(f, 1):
+            line = line.strip()
+            if line:
+                entry = json.loads(line)
+                if 'pair_id' not in entry:
+                    entry['pair_id'] = f'{i:08d}'
+                entries.append(entry)
+    return entries
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -289,7 +294,6 @@ class ClipList:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def randomEqBands():
-    """Generate 1-6 random EQ bands with clustered frequency rejection."""
     n_bands = random.randint(1, 6)
     bands = []
     freqs_used = []
@@ -298,7 +302,6 @@ def randomEqBands():
         retries = 0
         while retries < 20:
             freq = np.exp(random.uniform(np.log(20), np.log(20000)))
-            # Check for clustering
             too_close = False
             for used_freq in freqs_used:
                 if abs(freq - used_freq) / max(freq, used_freq) < 0.1:
@@ -323,7 +326,6 @@ def randomEqBands():
 
 
 def randomCompressorParams():
-    """Generate random compressor parameters."""
     return {
         'threshold_db': round(random.uniform(-60, 0), 2),
         'ratio': round(random.uniform(1, 20), 2),
@@ -343,7 +345,6 @@ def randomCompressorParams():
 
 
 def randomEsserParams():
-    """Generate random esser parameters."""
     return {
         'center_freq_hz': round(random.uniform(4000, 10000), 1),
         'threshold_db': round(random.uniform(-60, 0), 2),
@@ -355,7 +356,6 @@ def randomEsserParams():
 
 
 def randomSaturatorParams():
-    """Generate random saturator parameters."""
     return {
         'drive_db': round(random.uniform(0, 24), 2),
         'mix': round(random.uniform(0, 1), 2),
@@ -368,7 +368,6 @@ def randomSaturatorParams():
 
 
 def randomLimiterParams():
-    """Generate random limiter parameters."""
     return {
         'ceiling_db': round(random.uniform(-12, 0), 2),
         'release_ms': round(random.uniform(1, 500), 2),
@@ -380,7 +379,6 @@ def randomLimiterParams():
 
 
 def randomTransientParams():
-    """Generate random transient shaper parameters."""
     return {
         'attack_gain_db': round(random.uniform(-24, 24), 2),
         'sustain_gain_db': round(random.uniform(-24, 24), 2),
@@ -392,7 +390,6 @@ def randomTransientParams():
 
 
 def randomGainParams():
-    """Generate random gain parameters."""
     return {
         'gain_db': round(random.uniform(-12, 12), 2),
         'stereo_balance': round(random.uniform(-1, 1), 2),
@@ -400,7 +397,6 @@ def randomGainParams():
 
 
 def generateDegradationParams():
-    """Generate random parameters for all 7 plugins."""
     return {
         'eq_bands': randomEqBands(),
         'compressor': randomCompressorParams(),
@@ -417,86 +413,45 @@ def generateDegradationParams():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def applyDegradation(audio, sr, params):
-    """Apply sequential 7-plugin degradation pipeline to audio."""
     audio = audio.astype(np.float32)
 
-    # 1. EQ
     audio, _ = equalizer.process(audio, sr, bands=params['eq_bands'])
-
-    # 2. Compressor
     audio, _ = compressor.process(audio, sr, **params['compressor'])
-
-    # 3. Esser
     audio, _ = esser.process(audio, sr, **params['esser'])
-
-    # 4. Saturator
     audio, _ = saturator.process(audio, sr, **params['saturator'])
-
-    # 5. Limiter
     audio, _ = limiter.process(audio, sr, **params['limiter'])
-
-    # 6. Transient Shaper
     audio, _ = transient.process(audio, sr, **params['transient'])
-
-    # 7. Gain
     audio, _ = gain1.process(audio, sr, **params['gain'])
 
     return audio
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Pair Generation
+# Audio Loading & Normalization
 # ══════════════════════════════════════════════════════════════════════════════
 
-def generatePairs(all_clips, clusters, n_pairs):
-    """Generate speaker pairs within clusters for degraded/reference pairing."""
-    # Group speakers by cluster
-    cluster_speakers = defaultdict(list)
-    for sid, info in clusters.items():
-        if sid in all_clips and len(all_clips[sid]) > 0:
-            cluster_speakers[info['cluster']].append(sid)
+def loadAndPrepareClip(audio_path, target_samples=CLIP_SAMPLES):
+    """Load WAV, mono, resample to SR, pad/trim to target_samples."""
+    audio, file_sr = sf.read(str(audio_path), dtype='float32')
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    if file_sr != SR:
+        audio = librosa.resample(audio, orig_sr=file_sr, target_sr=SR)
 
-    pairs = []
-    source_counts = defaultdict(int)
-    ref_counts = defaultdict(int)
+    if len(audio) < SR * 0.5:
+        return None
 
-    # Round-robin through cluster speaker pairs
-    for cluster_id, speakers in cluster_speakers.items():
-        if len(speakers) < 2:
-            continue  # Need at least 2 speakers for pairing
+    # Pad or trim to exact clip length
+    if len(audio) < target_samples:
+        padded = np.zeros(target_samples, dtype=np.float32)
+        padded[:len(audio)] = audio
+        audio = padded
+    elif len(audio) > target_samples:
+        # Take middle portion
+        start = (len(audio) - target_samples) // 2
+        audio = audio[start:start + target_samples]
 
-        # Create all unordered speaker pairs within this cluster
-        speaker_pairs = []
-        for i in range(len(speakers)):
-            for j in range(i + 1, len(speakers)):
-                speaker_pairs.append((speakers[i], speakers[j]))
-
-        # Distribute pairs across clusters proportionally
-        cluster_n = max(1, int(n_pairs * len(speakers) / 130))
-
-        for _ in range(cluster_n):
-            src_spk, ref_spk = random.choice(speaker_pairs)
-            # Pick random clips
-            src_idx = random.randint(0, len(all_clips[src_spk]) - 1)
-            ref_idx = random.randint(0, len(all_clips[ref_spk]) - 1)
-
-            pairs.append({
-                'pair_id': len(pairs) + 1,
-                'source_speaker': src_spk,
-                'ref_speaker': ref_spk,
-                'cluster_id': cluster_id,
-                'src_clip_idx': src_idx,
-                'ref_clip_idx': ref_idx,
-            })
-
-            source_counts[src_spk] += 1
-            ref_counts[ref_spk] += 1
-
-    # Trim or pad to exact n_pairs
-    random.shuffle(pairs)
-    pairs = pairs[:n_pairs]
-
-    return pairs, source_counts, ref_counts
+    return audio
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -504,11 +459,12 @@ def generatePairs(all_clips, clusters, n_pairs):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def makeJsonSafe(obj):
-    """Recursively convert numpy types to Python native types for JSON."""
     if isinstance(obj, dict):
         return {k: makeJsonSafe(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [makeJsonSafe(v) for v in obj]
+    elif isinstance(obj, (np.bool_,)):
+        return bool(obj)
     elif isinstance(obj, (np.integer,)):
         return int(obj)
     elif isinstance(obj, (np.floating,)):
@@ -518,51 +474,70 @@ def makeJsonSafe(obj):
     return obj
 
 
-def savePair(pair_id, degraded, reference, params, output_dir):
-    """Save a single degraded/reference pair to disk."""
-    pair_dir = output_dir / 'pairs' / f'{pair_id:08d}'
+def saveDegradedPair(pair_id, degraded, params, output_dir):
+    """Save degraded WAV + params.json (no reference.wav)."""
+    pair_dir = output_dir / 'pairs' / pair_id
     pair_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write audio
     degraded_clip = np.clip(degraded, -1.0, 1.0)
-    reference_clip = np.clip(reference, -1.0, 1.0)
-
-    sf.write(str(pair_dir / 'degraded.wav'),
+    sf.write(str(pair_dir / f'{pair_id}.wav'),
              (degraded_clip * 32767).astype(np.int16), SR)
-    sf.write(str(pair_dir / 'reference.wav'),
-             (reference_clip * 32767).astype(np.int16), SR)
 
-    # Write params (JSON-serializable)
     params_clean = makeJsonSafe(params)
     with open(pair_dir / 'params.json', 'w') as f:
         json.dump(params_clean, f, indent=2)
 
 
-def saveMetadata(clusters, identity_floors, pairs, source_counts, ref_counts, output_dir):
-    """Save global metadata and degradation params."""
+def getOutputSizeGB(output_dir):
+    total = sum(f.stat().st_size for f in output_dir.rglob('*') if f.is_file())
+    return total / (1024 ** 3)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Checkpoint
+# ══════════════════════════════════════════════════════════════════════════════
+
+def saveCheckpoint(checkpoint_path, state):
+    state['timestamp'] = time.time()
+    with open(checkpoint_path, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def loadCheckpoint(checkpoint_path):
+    if checkpoint_path.exists():
+        with open(checkpoint_path, 'r') as f:
+            return json.load(f)
+    return {'next_idx': 0, 'processed': 0, 'failed': 0}
+
+
+def getCompletedPairIds(output_dir):
+    """Return set of pair_ids that already have a WAV file."""
+    pairs_dir = output_dir / 'pairs'
+    if not pairs_dir.exists():
+        return set()
+    completed = set()
+    for d in pairs_dir.iterdir():
+        if d.is_dir():
+            wav_files = list(d.glob('*.wav'))
+            if wav_files:
+                completed.add(d.name)
+    return completed
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Metadata
+# ══════════════════════════════════════════════════════════════════════════════
+
+def saveMetadata(clusters, identity_floors, n_pairs, clip_stats, output_dir):
     metadata = {
-        'version': 1,
-        'n_pairs': len(pairs),
+        'version': 2,
+        'n_pairs': n_pairs,
         'sample_rate': SR,
         'clip_seconds': CLIP_SEC,
         'cluster_floors': identity_floors,
         'cluster_assignments': {sid: info['cluster'] for sid, info in clusters.items()},
         'n_speakers': len(clusters),
-        'source_balance': dict(source_counts),
-        'ref_balance': dict(ref_counts),
+        'clip_stats': clip_stats,
     }
     with open(output_dir / 'metadata.json', 'w') as f:
         json.dump(metadata, f, indent=2)
-
-    # Also save full degradation params for debugging
-    all_params = {}
-    for pair in pairs:
-        all_params[str(pair['pair_id'])] = pair
-    with open(output_dir / 'degradation_params.json', 'w') as f:
-        json.dump(all_params, f, indent=2)
-
-
-def getOutputSizeGB():
-    """Calculate total output size in GB."""
-    total = sum(f.stat().st_size for f in OUTPUT.rglob('*') if f.is_file())
-    return total / (1024 ** 3)
