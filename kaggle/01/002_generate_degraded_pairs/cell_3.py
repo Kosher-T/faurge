@@ -318,7 +318,7 @@ def randomEqBands():
             'q': round(random.uniform(0.1, 10), 2),
             'filter_type': random.choice(['peak', 'low_shelf', 'high_shelf',
                                           'highpass', 'lowpass', 'bandpass', 'notch']),
-            'stereo_skew_db': round(random.uniform(-6, 6), 2),
+            'stereo_skew_db': 0.0,
             'dynamic_depth': round(random.uniform(0, 1), 2),
         }
         bands.append(band)
@@ -335,7 +335,7 @@ def randomCompressorParams():
         'lookahead_ms': round(random.uniform(0, 10), 2),
         'hold_ms': round(random.uniform(0, 200), 2),
         'wet_dry_mix': round(random.uniform(0, 1), 2),
-        'stereo_link': round(random.uniform(0, 1), 2),
+        'stereo_link': 0.0,
         'sidechain_hp_hz': round(random.uniform(20, 500), 1),
         'sidechain_lp_hz': round(random.uniform(500, 20000), 1),
         'saturate_drive_db': round(random.uniform(0, 12), 2),
@@ -373,7 +373,7 @@ def randomLimiterParams():
         'release_ms': round(random.uniform(1, 500), 2),
         'lookahead_ms': round(random.uniform(0, 10), 2),
         'clip_mode': random.choice(['soft', 'hard']),
-        'stereo_link': round(random.uniform(0, 1), 2),
+        'stereo_link': 0.0,
         'oversampling': random.choice([1, 2, 4]),
     }
 
@@ -392,7 +392,7 @@ def randomTransientParams():
 def randomGainParams():
     return {
         'gain_db': round(random.uniform(-12, 12), 2),
-        'stereo_balance': round(random.uniform(-1, 1), 2),
+        'stereo_balance': 0.0,
     }
 
 
