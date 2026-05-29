@@ -34,6 +34,7 @@ class UrsulaDSPEnv(gym.Env):
         max_steps: int = MAX_STEPS,
         soft_clamp_k: float = 10.0,
         mode: str = "train",  # "train" or "eval"
+        max_pairs: int = None,  # curriculum: limit number of pairs
     ):
         super().__init__()
 
@@ -49,6 +50,11 @@ class UrsulaDSPEnv(gym.Env):
 
         # ── Load paths.csv ──
         self._load_paths()
+
+        # ── Apply curriculum pair limit ──
+        if max_pairs is not None and max_pairs < len(self._pairs):
+            self._pairs = self._pairs[:max_pairs]
+            print(f"  Curriculum: limited to {max_pairs} pairs")
 
         # ── Load identity floors ──
         self._load_identity_floors()
@@ -88,12 +94,21 @@ class UrsulaDSPEnv(gym.Env):
     def _load_paths(self):
         """Load paths.csv — maps pair_id to degraded/reference paths and cluster_id."""
         csv_path = self.metrics_data / 'paths.csv'
-        self._pairs = []
+        self._all_pairs = []
         with open(csv_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                self._pairs.append(row)
-        print(f"  Loaded {len(self._pairs)} pairs from {csv_path}")
+                self._all_pairs.append(row)
+        self._pairs = list(self._all_pairs)
+        print(f"  Loaded {len(self._all_pairs)} pairs from {csv_path}")
+
+    def set_max_pairs(self, max_pairs: int):
+        """Curriculum expansion: limit or expand available pairs."""
+        if max_pairs >= len(self._all_pairs):
+            self._pairs = list(self._all_pairs)
+        else:
+            self._pairs = self._all_pairs[:max_pairs]
+        print(f"  Curriculum: {len(self._pairs)} pairs available")
 
     def _load_identity_floors(self):
         """Load identity_floors.json for reward clamping."""
@@ -156,7 +171,7 @@ class UrsulaDSPEnv(gym.Env):
         super().reset(seed=seed)
 
         # Sample a random pair
-        idx = self.np_random.integers(len(self._pairs))
+        idx = int(self.np_random.integers(len(self._pairs)))
         self._pair_info = self._pairs[idx]
         pair_id = self._pair_info['pair_id']
 
