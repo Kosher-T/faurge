@@ -21,6 +21,14 @@ import torch.nn.functional as F
 import gymnasium as gym
 from gymnasium import spaces
 
+# ── Numba JIT (optional speedup) ────────────────────────────────────────────
+try:
+    import numba
+    print(f"Numba {numba.__version__} — JIT acceleration enabled")
+except ImportError:
+    numba = None
+    print("Numba not available — using fallback (install: pip install numba)")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Import portable plugins (Kaggle top-level modules)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -53,7 +61,7 @@ print("Loaded plugins:", list(PLUGIN_MODULES.keys()))
 # ══════════════════════════════════════════════════════════════════════════════
 
 SR = 48000
-CLIP_SEC = 5.0
+CLIP_SEC = 3.0
 CLIP_SAMPLES = int(SR * CLIP_SEC)
 INPUT_DIM = 143       # 67 + 67 + 9
 OUTPUT_DIM = 227      # all plugin params flattened

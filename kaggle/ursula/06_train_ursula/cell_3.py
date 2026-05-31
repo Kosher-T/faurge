@@ -87,10 +87,38 @@ def extract_metrics_67d(audio):
     return np.concatenate([ltas, lufs, crest, zcr]).astype(np.float32)
 
 
-def soft_clamp(x, k=10.0):
-    if x <= 0:
-        return 0.0
-    return -np.tanh(k * x)
+def compute_reward(mse, floor, initial_mse):
+    """Reward that provides gradient across the full MSE range.
+
+    Uses log-scaling throughout to avoid saturation when mse >> initial_mse
+    (common during warmup with random actions).
+
+    Returns:
+        +1.0 if mse <= floor (solved)
+        Smooth value in (-1, +1) otherwise, always with gradient
+    """
+    if mse <= floor:
+        return 1.0
+
+    # ── Base penalty: log-distance from floor ──
+    # log(mse/floor) compresses huge MSE range to manageable scale
+    # tanh keeps it bounded; scale=0.1 → tanh reaches ~0.76 at ratio=10000
+    log_ratio = np.log(mse / max(floor, 1e-6))
+    base_penalty = -np.tanh(log_ratio * 0.1)  # in (-1, 0)
+
+    # ── Progress bonus: improvement relative to start ──
+    # Also log-scaled so it can't dominate/saturate
+    if initial_mse > floor and mse < initial_mse:
+        # How much of the log-gap have we closed?
+        # 1.0 when mse=floor, 0.0 when mse=initial_mse
+        log_total = np.log(initial_mse / max(floor, 1e-6))
+        log_remaining = np.log(mse / max(floor, 1e-6))
+        fraction_closed = 1.0 - (log_remaining / max(log_total, 1e-6))
+        bonus = 0.5 * fraction_closed  # up to +0.5
+    else:
+        bonus = 0.0
+
+    return float(np.clip(base_penalty + bonus, -1.0, 1.0))
 
 
 def decode_action(action):
@@ -221,7 +249,7 @@ class UrsulaDSPEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, pairs_data=None, metrics_data=None, cluster_data=None,
-                 max_steps=MAX_STEPS, soft_clamp_k=10.0, mode="train", max_pairs=None):
+                 max_steps=MAX_STEPS, soft_clamp_k=1.0, mode="train", max_pairs=None):
         super().__init__()
         self.pairs_data = pairs_data or PAIRS_DATA
         self.metrics_data = metrics_data or METRICS_DATA
@@ -255,7 +283,7 @@ class UrsulaDSPEnv(gym.Env):
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(OUTPUT_DIM,), dtype=np.float32)
         self._current_audio = None; self._current_metrics = None; self._reference_metrics = None
         self._cluster_onehot = None; self._cluster_id = None; self._pair_info = None
-        self._step_count = 0; self._current_mse = None
+        self._step_count = 0; self._current_mse = None; self._initial_mse = 0.0
 
     def set_max_pairs(self, max_pairs):
         if max_pairs >= len(self._all_pairs):
@@ -301,6 +329,7 @@ class UrsulaDSPEnv(gym.Env):
         self._cluster_onehot = self._build_onehot(self._cluster_id)
         self._step_count = 0
         self._current_mse = float(np.mean((self._current_metrics - self._reference_metrics) ** 2))
+        self._initial_mse = self._current_mse
         obs = np.concatenate([self._current_metrics, self._reference_metrics, self._cluster_onehot]).astype(np.float32)
         return obs, {"pair_id": pair_id, "cluster_id": self._cluster_id,
                      "initial_mse": self._current_mse, "identity_floor": self._get_floor(self._cluster_id)}
@@ -320,11 +349,11 @@ class UrsulaDSPEnv(gym.Env):
             return obs, -1.0, False, False, {"error": str(e)}
         mse = float(np.mean((m_result - self._reference_metrics) ** 2))
         floor = self._get_floor(self._cluster_id)
-        reward = soft_clamp(mse - floor, k=self.soft_clamp_k)
+        reward = compute_reward(mse, floor, self._initial_mse)
         self._current_audio = processed; self._current_metrics = m_result; self._current_mse = mse
         obs = np.concatenate([self._current_metrics, self._reference_metrics, self._cluster_onehot]).astype(np.float32)
         return obs, reward, mse < floor, self._step_count >= self.max_steps, {
-            "mse": mse, "identity_floor": floor, "step": self._step_count, "delta_mse": 0.0}
+            "mse": mse, "identity_floor": floor, "step": self._step_count, "delta_mse": self._initial_mse - mse}
 
 
 print("UrsulaDSPEnv (inline) defined")

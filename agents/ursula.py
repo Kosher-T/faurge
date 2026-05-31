@@ -705,6 +705,31 @@ class UrsulaSACCritic(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.q1(state, action), self.q2(state, action)
 
+    def load_pretrained_policy(self, policy: 'UrsulaPolicy'):
+        """Warm-start SAC actor mu-heads from a pretrained UrsulaPolicy.
+
+        Maps shared trunk weights and plugin_heads.* → mu_heads.*.
+        log_std_heads and twin Q-networks remain freshly initialized.
+        """
+        policy_sd = policy.state_dict()
+        trunk_keys = {k: v for k, v in policy_sd.items() if k.startswith("trunk_")}
+        plugin_keys = {k: v for k, v in policy_sd.items() if k.startswith("plugin_heads.")}
+
+        missing, unexpected = self.load_state_dict(trunk_keys, strict=False)
+        mu_sd = self.mu_heads.state_dict()
+        for k, v in plugin_keys.items():
+            head_key = k[len("plugin_heads."):]
+            if head_key in mu_sd:
+                mu_sd[head_key] = v
+        self.mu_heads.load_state_dict(mu_sd)
+
+        n_trunk = len(trunk_keys)
+        n_plugin = len(plugin_keys)
+        loaded = sum(v.numel() for v in trunk_keys.values()) + sum(v.numel() for v in plugin_keys.values())
+        total = sum(p.numel() for p in self.parameters())
+        print(f"[warm-start] Loaded {n_trunk} trunk + {n_plugin} plugin-head keys "
+              f"({loaded:,}/{total:,} params). log_std & critics remain fresh.")
+
     def q_min(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         """Return min(Q1, Q2) — used for target network updates."""
         q1, q2 = self.forward(state, action)

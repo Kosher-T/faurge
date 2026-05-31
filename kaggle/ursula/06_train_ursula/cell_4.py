@@ -14,6 +14,58 @@ env = UrsulaDSPEnv(mode="train", max_pairs=CURRICULUM[0]["max_pairs"])
 agent = SACAgent()
 replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE, INPUT_DIM, OUTPUT_DIM, device=DEVICE)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Checkpoint Resume
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Import pre-existing checkpoint if no local checkpoints exist
+import shutil
+EXISTING_CKPT = Path('/kaggle/input/models/itorousa/ursula/pytorch/default/1/ursula_step_0002000.pt')
+existing_checkpoints = sorted(CHECKPOINT_DIR.glob("ursula_step_*.pt"))
+
+if not existing_checkpoints and EXISTING_CKPT.exists():
+    shutil.copy2(EXISTING_CKPT, CHECKPOINT_DIR / EXISTING_CKPT.name)
+    print(f"  Imported checkpoint: {EXISTING_CKPT.name}")
+    existing_checkpoints = sorted(CHECKPOINT_DIR.glob("ursula_step_*.pt"))
+
+start_step = 0
+current_curriculum_idx = 0
+
+if existing_checkpoints:
+    latest_ckpt = existing_checkpoints[-1]
+    print(f"\n  Found checkpoint: {latest_ckpt.name}")
+    start_step = agent.load_checkpoint(latest_ckpt)
+
+    # Try to load extra metadata from the checkpoint file
+    ckpt_raw = torch.load(latest_ckpt, map_location=DEVICE, weights_only=False)
+    current_curriculum_idx = ckpt_raw.get("curriculum_idx", 0)
+
+    # Restore curriculum
+    if current_curriculum_idx < len(CURRICULUM):
+        c = CURRICULUM[current_curriculum_idx]
+        max_p = c["max_pairs"]
+        env.set_max_pairs(max_p if max_p is not None else len(env._all_pairs))
+        print(f"  Resumed at step {start_step:,} — {c['name']} ({len(env._pairs)} pairs)")
+    else:
+        print(f"  Resumed at step {start_step:,}")
+else:
+    print(f"\n  No checkpoint found — starting fresh")
+
+# ── Phase 6A Warm-Start: load pretrained policy weights ──
+PRETRAINED_PATH = OUTPUT / "ursula_pretrained.pt"
+if not PRETRAINED_PATH.exists():
+    ALT_PATH = Path('/kaggle/input/models/itorousa/ursula_pretrained/pytorch/default/1/ursula_pretrained.pt')
+    if ALT_PATH.exists():
+        PRETRAINED_PATH = ALT_PATH
+
+if PRETRAINED_PATH.exists() and start_step == 0:
+    agent.load_pretrained_policy(PRETRAINED_PATH)
+    print(f"  [WARM-START] Loaded pretrained policy from {PRETRAINED_PATH.name}")
+elif PRETRAINED_PATH.exists() and start_step > 0:
+    print(f"  [WARM-START] Checkpoint resume — skipping pretrained load (step {start_step})")
+else:
+    print(f"  [WARM-START] No pretrained policy found — starting from scratch")
+
 print(f"Environment: {len(env._pairs)} pairs (Phase A: {CURRICULUM[0]['max_pairs']})")
 print(f"Agent: {sum(p.numel() for p in agent.actor.parameters()):,} actor params, "
       f"{sum(p.numel() for p in agent.critic.parameters()):,} critic params")
@@ -22,25 +74,44 @@ print(f"Agent: {sum(p.numel() for p in agent.actor.parameters()):,} actor params
 # Training Loop
 # ══════════════════════════════════════════════════════════════════════════════
 
-TOTAL_STEPS = 100_000
+TOTAL_STEPS = 300_000
 LOG_INTERVAL = 100
-CHECKPOINT_INTERVAL = 2000
+CHECKPOINT_INTERVAL = 500
 ROLLOUT_INTERVAL = 5000
 EVAL_INTERVAL = 10_000
 CLUSTER_MASK_PROB = 0.1
 
-current_curriculum_idx = 0
+current_curriculum_idx = current_curriculum_idx
 state, info = env.reset()
 episode_reward = 0.0
 episode_steps = 0
 episode_count = 0
+metrics = {"critic_loss": 0, "actor_loss": 0, "alpha": 0, "alpha_loss": 0}
 t_train_start = time.time()
 
+# ── Initial diagnostic ──
 print(f"\n{'='*60}")
 print(f"  Training: {TOTAL_STEPS:,} steps")
+print(f"{'='*60}")
+obs, info = env.reset()
+m_degraded = env._current_metrics
+m_ref = env._reference_metrics
+print(f"  Initial MSE: {info['initial_mse']:.4f}")
+print(f"  Identity floor: {info['identity_floor']:.6f}")
+print(f"  M_degraded range: [{m_degraded.min():.2f}, {m_degraded.max():.2f}]")
+print(f"  M_reference range: [{m_ref.min():.2f}, {m_ref.max():.2f}]")
+print(f"  Per-band |diff| top 5: {np.sort(np.abs(m_degraded - m_ref))[-5:]}")
+
+# ── Reward function sanity check ──
+_floor = info['identity_floor']
+_init = info['initial_mse']
+print(f"\n  Reward function check (floor={_floor:.4f}, init_mse={_init:.1f}):")
+for _test_mse in [_init * 10, _init * 2, _init, _init * 0.5, _init * 0.1, _floor * 2, _floor]:
+    _r = compute_reward(_test_mse, _floor, _init)
+    print(f"    mse={_test_mse:>10.2f} → reward={_r:+.4f}")
 print(f"{'='*60}\n")
 
-for step in range(1, TOTAL_STEPS + 1):
+for step in range(start_step + 1, TOTAL_STEPS + 1):
 
     # ── Curriculum expansion ──
     if current_curriculum_idx < len(CURRICULUM) - 1:

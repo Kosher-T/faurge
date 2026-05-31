@@ -130,7 +130,7 @@ class SACAgent:
         with torch.no_grad():
             next_actions, next_log_probs = self.actor(next_states)
             q1_next, q2_next = self.critic_target(next_states, next_actions)
-            q_next = torch.min(q1_next, q2_next) - self.alpha.detach() * next_log_probs
+            q_next = torch.min(q1_next, q2_next) - self.alpha.detach() * next_log_probs.unsqueeze(-1)
             q_target = rewards + self.gamma * (1.0 - dones) * q_next
 
         q1, q2 = self.critic(states, actions)
@@ -150,7 +150,7 @@ class SACAgent:
             q1_new, q2_new = self.critic(states, new_actions)
             q_new = torch.min(q1_new, q2_new)
 
-            actor_loss = (self.alpha.detach() * log_probs - q_new).mean()
+            actor_loss = (self.alpha.detach() * log_probs.unsqueeze(-1) - q_new).mean()
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
@@ -182,6 +182,42 @@ class SACAgent:
             self.critic.parameters(), self.critic_target.parameters()
         ):
             target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+
+    def load_pretrained_policy(self, path: Path):
+        """Load pretrained UrsulaPolicy weights as warm-start for the actor.
+
+        Maps from UrsulaPolicy (plugin_heads.* → mu_heads.*) and loads
+        the shared trunk. log_std_heads and critic networks remain fresh.
+        """
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
+        policy_sd = ckpt["policy_state_dict"]
+
+        # Separate trunk keys vs plugin_head keys
+        trunk_keys = {k: v for k, v in policy_sd.items() if k.startswith("trunk_")}
+        plugin_keys = {k: v for k, v in policy_sd.items() if k.startswith("plugin_heads.")}
+
+        # Load trunk (same key names in UrsulaPolicy and UrsulaSACActor)
+        missing, unexpected = self.actor.load_state_dict(trunk_keys, strict=False)
+        if missing:
+            print(f"  [PRETRAIN] Trunk missing keys (expected — log_std_heads): {len(missing)}")
+        if unexpected:
+            print(f"  [PRETRAIN] Trunk unexpected keys: {unexpected}")
+
+        # Map plugin_heads.* → mu_heads.*
+        mu_sd = self.actor.mu_heads.state_dict()
+        for k, v in plugin_keys.items():
+            # k = "plugin_heads.eq.weight" → "eq.weight"
+            head_key = k[len("plugin_heads."):]
+            if head_key in mu_sd:
+                mu_sd[head_key] = v
+        self.actor.mu_heads.load_state_dict(mu_sd)
+
+        n_trunk = len(trunk_keys)
+        n_plugin = len(plugin_keys)
+        total = sum(p.numel() for p in self.actor.parameters())
+        loaded = sum(v.numel() for v in trunk_keys.values()) + sum(v.numel() for v in plugin_keys.values())
+        print(f"  [PRETRAIN] Loaded {n_trunk} trunk + {n_plugin} plugin keys ({loaded:,}/{total:,} params)")
+        print(f"  [PRETRAIN] log_std_heads and critics initialized fresh")
 
     def save_checkpoint(self, path: Path, step: int, extra: dict = None):
         """Save full agent state to disk."""
