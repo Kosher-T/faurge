@@ -88,37 +88,33 @@ def extract_metrics_67d(audio):
 
 
 def compute_reward(mse, floor, initial_mse):
-    """Reward that provides gradient across the full MSE range.
+    """Reward based on MSE improvement (delta-MSE) for single-step episodes.
 
-    Uses log-scaling throughout to avoid saturation when mse >> initial_mse
-    (common during warmup with random actions).
-
-    Returns:
-        +1.0 if mse <= floor (solved)
-        Smooth value in (-1, +1) otherwise, always with gradient
+    For single-step episodes, the agent gets one shot. We reward improvement
+    over the initial degraded state:
+        mse <= floor:   +1.0  (solved)
+        mse < init:     0.0 to +1.0 (proportional improvement)
+        mse == init:    0.0  (no change)
+        mse > init:     negative (made things worse)
     """
     if mse <= floor:
         return 1.0
 
-    # ── Base penalty: log-distance from floor ──
-    # log(mse/floor) compresses huge MSE range to manageable scale
-    # tanh keeps it bounded; scale=0.1 → tanh reaches ~0.76 at ratio=10000
-    log_ratio = np.log(mse / max(floor, 1e-6))
-    base_penalty = -np.tanh(log_ratio * 0.1)  # in (-1, 0)
+    floor = max(floor, 1e-6)
+    init = max(initial_mse, floor + 1e-6)
 
-    # ── Progress bonus: improvement relative to start ──
-    # Also log-scaled so it can't dominate/saturate
-    if initial_mse > floor and mse < initial_mse:
-        # How much of the log-gap have we closed?
-        # 1.0 when mse=floor, 0.0 when mse=initial_mse
-        log_total = np.log(initial_mse / max(floor, 1e-6))
-        log_remaining = np.log(mse / max(floor, 1e-6))
-        fraction_closed = 1.0 - (log_remaining / max(log_total, 1e-6))
-        bonus = 0.5 * fraction_closed  # up to +0.5
+    # Normalized improvement: 1.0 at floor, 0.0 at init, negative beyond
+    if mse <= init:
+        # Progress region: 0.0 (at init) to 1.0 (at floor)
+        log_ratio = np.log(mse / floor)
+        log_init_ratio = np.log(init / floor)
+        reward = 1.0 - (log_ratio / log_init_ratio)
     else:
-        bonus = 0.0
+        # Harm region: penalty beyond init
+        excess = (mse - init) / max(init, 1e-6)
+        reward = -np.tanh(excess * 2.0)
 
-    return float(np.clip(base_penalty + bonus, -1.0, 1.0))
+    return float(np.clip(reward, -1.0, 1.0))
 
 
 def decode_action(action):
@@ -249,7 +245,7 @@ class UrsulaDSPEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, pairs_data=None, metrics_data=None, cluster_data=None,
-                 max_steps=MAX_STEPS, soft_clamp_k=1.0, mode="train", max_pairs=None):
+                 max_steps=MAX_EPISODE_STEPS, soft_clamp_k=1.0, mode="train", max_pairs=None):
         super().__init__()
         self.pairs_data = pairs_data or PAIRS_DATA
         self.metrics_data = metrics_data or METRICS_DATA
@@ -324,6 +320,12 @@ class UrsulaDSPEnv(gym.Env):
         self._pair_info = self._pairs[idx]
         pair_id = self._pair_info['pair_id']
         self._current_audio = self._load_audio(self._pair_info['degraded_path'])
+        # Load reference audio for rollouts
+        ref_path = self._pair_info.get('reference_path') or self._pair_info.get('pristine_path')
+        if ref_path and Path(ref_path).exists():
+            self._reference_audio = self._load_audio(ref_path)
+        else:
+            self._reference_audio = self._current_audio.copy()
         self._current_metrics, self._reference_metrics = self._load_metrics(pair_id)
         self._cluster_id = int(self._pair_info['cluster_id_reference'])
         self._cluster_onehot = self._build_onehot(self._cluster_id)

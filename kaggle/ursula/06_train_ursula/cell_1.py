@@ -68,7 +68,6 @@ OUTPUT_DIM = 227      # all plugin params flattened
 N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1
-MAX_STEPS = 50
 
 # ── Paths (Kaggle) ────────────────────────────────────────────────────────────
 INPUT = Path('/kaggle/input')
@@ -123,8 +122,9 @@ CRITIC_LR = 3e-4
 GAMMA = 0.99            # discount
 TAU = 0.005             # soft update
 ALPHA_LR = 3e-4         # entropy auto-tune LR
-WARMUP_STEPS = 5000     # random exploration before training
-MAX_EPISODE_STEPS = 50
+ALPHA_MIN = 0.2         # strong floor for entropy coefficient (prevents entropy death)
+WARMUP_STEPS = 50_000   # large warmup to fill buffer with diverse experience
+MAX_EPISODE_STEPS = 1   # single-step: one shot to fix the audio
 POLICY_DELAY = 2        # update actor every N critic steps
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -132,9 +132,10 @@ POLICY_DELAY = 2        # update actor every N critic steps
 # ══════════════════════════════════════════════════════════════════════════════
 
 CURRICULUM = [
-    {"name": "Phase A", "max_pairs": 3,    "start_step": 0,     "end_step": 20_000},
-    {"name": "Phase B", "max_pairs": 30,   "start_step": 20_000, "end_step": 50_000},
-    {"name": "Phase C", "max_pairs": None,  "start_step": 50_000, "end_step": float('inf')},
+    {"name": "Phase A", "max_pairs": 10,   "start_step": 0,       "end_step": 30_000},
+    {"name": "Phase B", "max_pairs": 30,   "start_step": 30_000,  "end_step": 80_000},
+    {"name": "Phase C", "max_pairs": 100,  "start_step": 80_000,  "end_step": 150_000},
+    {"name": "Phase D", "max_pairs": None, "start_step": 150_000, "end_step": float('inf')},
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -160,6 +161,7 @@ print(f"  Critic LR:      {CRITIC_LR}")
 print(f"  Gamma:          {GAMMA}")
 print(f"  Tau:            {TAU}")
 print(f"  Warmup steps:   {WARMUP_STEPS:,}")
+print(f"  Alpha min:      {ALPHA_MIN}")
 print(f"  Policy delay:   {POLICY_DELAY}")
 print(f"  Max episode:    {MAX_EPISODE_STEPS}")
 print(f"  Curriculum:     {len(CURRICULUM)} stages")

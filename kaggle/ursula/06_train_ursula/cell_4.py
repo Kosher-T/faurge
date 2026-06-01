@@ -109,6 +109,7 @@ print(f"\n  Reward function check (floor={_floor:.4f}, init_mse={_init:.1f}):")
 for _test_mse in [_init * 10, _init * 2, _init, _init * 0.5, _init * 0.1, _floor * 2, _floor]:
     _r = compute_reward(_test_mse, _floor, _init)
     print(f"    mse={_test_mse:>10.2f} → reward={_r:+.4f}")
+print(f"\n  Expected: init→0.0, 0.5*init→+0.5, floor→+1.0, 2*init→negative")
 print(f"{'='*60}\n")
 
 for step in range(start_step + 1, TOTAL_STEPS + 1):
@@ -200,8 +201,7 @@ for step in range(start_step + 1, TOTAL_STEPS + 1):
             rollout_dir.mkdir(exist_ok=True)
             sf.write(str(rollout_dir / f"step_{step:07d}_degraded.wav"), env._current_audio, SR)
             sf.write(str(rollout_dir / f"step_{step:07d}_processed.wav"), processed, SR)
-            sf.write(str(rollout_dir / f"step_{step:07d}_reference.wav"),
-                     env._reference_audio if hasattr(env, '_reference_audio') else env._current_audio, SR)
+            sf.write(str(rollout_dir / f"step_{step:07d}_reference.wav"), env._reference_audio, SR)
             print(f"  [AUDIO] Saved rollout at step {step}")
         except Exception as e:
             print(f"  [AUDIO] Rollout failed: {e}")
@@ -209,24 +209,28 @@ for step in range(start_step + 1, TOTAL_STEPS + 1):
     # ── Evaluation ──
     if step % EVAL_INTERVAL == 0:
         print(f"\n  --- Evaluation at step {step} ---")
-        eval_rewards = []; eval_mses = []; eval_floors = []
+        eval_rewards = []; eval_mses = []; eval_floors = []; eval_initial = []
         for _ in range(100):
             obs, einfo = env.reset()
-            for _ in range(MAX_EPISODE_STEPS):
-                a = agent.select_action(obs, deterministic=True)
-                obs, r, term, trunc, si = env.step(a)
-                if term or trunc:
-                    break
+            eval_initial.append(einfo.get("initial_mse", 0))
+            # Single-step: one action per episode
+            a = agent.select_action(obs, deterministic=True)
+            obs, r, term, trunc, si = env.step(a)
             eval_rewards.append(r)
             eval_mses.append(si.get("mse", float('nan')))
             eval_floors.append(einfo.get("identity_floor", 0.05))
         eval_rewards = np.array(eval_rewards)
         eval_mses = np.array(eval_mses)
         eval_floors = np.array(eval_floors)
+        eval_initial = np.array(eval_initial)
         below_floor = np.mean(eval_mses < eval_floors) * 100
         below_2x = np.mean(eval_mses < 2 * eval_floors) * 100
+        improvement = np.mean(eval_initial - eval_mses)
+        pct_improved = np.mean(eval_mses < eval_initial) * 100
         print(f"    Mean reward:    {eval_rewards.mean():.4f} ± {eval_rewards.std():.4f}")
-        print(f"    Mean MSE:       {eval_mses.mean():.6f} ± {eval_mses.std():.6f}")
+        print(f"    Mean MSE:       {eval_mses.mean():.2f} ± {eval_mses.std():.2f}")
+        print(f"    Mean initial:   {eval_initial.mean():.2f}")
+        print(f"    Avg improvement: {improvement:.2f} ({pct_improved:.1f}% pairs improved)")
         print(f"    < floor:        {below_floor:.1f}%")
         print(f"    < 2× floor:     {below_2x:.1f}%")
         print(f"  --- End eval ---\n")

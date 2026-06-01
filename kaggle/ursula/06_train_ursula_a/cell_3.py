@@ -1,8 +1,10 @@
 # %% [markdown]
 # ## Supervised Training
 #
-# Train the policy network to predict the best restoration parameters
-# found by random search. Simple MSE regression on the 227D action vector.
+# Train the policy network to predict inverse degradation parameters
+# from metric pairs. MSE regression on the 227D action vector.
+# With thousands of meaningful targets (vs 3 from random search),
+# the model learns physically grounded restoration parameters.
 
 import pickle
 
@@ -24,11 +26,11 @@ print(f"  Targets: {targets.shape}")
 print(f"  MSE range: [{mses.min():.2f}, {mses.max():.2f}]")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Augment data: replicate with noise to avoid overfitting on 3 pairs
+# Augment data: replicate with noise to improve generalization
 # ══════════════════════════════════════════════════════════════════════════════
 
-N_COPIES = SUPERVISED_EPOCHS  # replicate to fill batches
-noise_std = 0.02  # small noise on observations
+N_COPIES = max(1, SUPERVISED_EPOCHS // 10)  # fewer copies, more real pairs
+noise_std = AUGMENTATION_NOISE
 
 obs_aug = observations.repeat(N_COPIES, 1)
 tgt_aug = targets.repeat(N_COPIES, 1)
@@ -59,6 +61,7 @@ print(f"{'='*60}\n")
 
 policy.train()
 t_start = time.time()
+best_eval_mse = float('inf')
 
 for epoch in range(1, SUPERVISED_EPOCHS + 1):
     epoch_loss = 0.0
@@ -84,7 +87,6 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
         with torch.no_grad():
             pred_all = policy(observations)
             eval_mse = F.mse_loss(pred_all, targets).item()
-            # Per-plugin MSE
             pred_np = pred_all.cpu().numpy()
             tgt_np = targets.cpu().numpy()
             eq_mse = np.mean((pred_np[:, :186] - tgt_np[:, :186]) ** 2)
@@ -92,9 +94,14 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
             rest_mse = np.mean((pred_np[:, 200:] - tgt_np[:, 200:]) ** 2)
         policy.train()
 
+        if eval_mse < best_eval_mse:
+            best_eval_mse = eval_mse
+
         elapsed = time.time() - t_start
         lr = scheduler.get_last_lr()[0]
         print(f"  epoch {epoch:>4}/{SUPERVISED_EPOCHS} | loss {avg_loss:.6f} | eval_mse {eval_mse:.6f} "
-              f"| EQ {eq_mse:.6f} Comp {comp_mse:.6f} Rest {rest_mse:.6f} | lr {lr:.6f} | {elapsed:.0f}s")
+              f"(best {best_eval_mse:.6f}) | EQ {eq_mse:.6f} Comp {comp_mse:.6f} Rest {rest_mse:.6f} "
+              f"| lr {lr:.6f} | {elapsed:.0f}s")
 
 print(f"\n  Training complete — {time.time() - t_start:.0f}s")
+print(f"  Best eval MSE: {best_eval_mse:.6f}")

@@ -1,17 +1,18 @@
 # %% [markdown]
-# # Phase 6A: Supervised Pretraining
+# # Phase 6A: Inverse Degradation Supervised Pretraining
 #
 # Before RL, pretrain the policy network on degraded→reference pairs.
-# For each pair, find the best restoration parameters via random search,
-# then train the policy to predict those parameters from metrics.
+# For each pair, compute the approximate inverse of the degradation
+# parameters (negate EQ gains, disable non-linear effects), then train
+# the policy to predict those inverse actions from metrics.
 #
-# This gives the RL agent a head start — it begins near a good solution
-# instead of random exploration.
+# This gives the RL agent a strong starting point — it begins with
+# physically meaningful restoration parameters.
 #
-# **Inputs:** Same as Phase 6 (metrics + audio pairs)
+# **Inputs:** degradation_params.json + metrics + audio pairs
 # **Outputs:** `ursula_pretrained.pt` — warm-start weights for RL
 
-import json, time, sys, os, csv, random, shutil
+import json, time, sys, os, csv, random, shutil, math
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
@@ -89,18 +90,18 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Device: {DEVICE}")
 
 # ── Hyperparameters ──
-MAX_PAIRS = 3
-N_RANDOM_CANDIDATES = 500       # random search candidates per pair
-SUPERVISED_EPOCHS = 200
-SUPERVISED_BATCH_SIZE = 32
-SUPERVISED_LR = 1e-3
-TARGET_MSE_THRESHOLD = 50.0     # stop searching if MSE < this
+MAX_PAIRS = None                # use ALL pairs with degradation_params
+SUPERVISED_EPOCHS = 500         # more epochs since we have good targets
+SUPERVISED_BATCH_SIZE = 64
+SUPERVISED_LR = 3e-4            # lower LR for cleaner convergence
+AUGMENTATION_NOISE = 0.01       # smaller noise since targets are meaningful
 
 print(f"\n{'='*60}")
-print(f"  PHASE 6A: SUPERVISED PRETRAINING")
+print(f"  PHASE 6A: INVERSE DEGRADATION PRETRAINING")
 print(f"{'='*60}")
-print(f"  Pairs:           {MAX_PAIRS}")
-print(f"  Candidates/pair: {N_RANDOM_CANDIDATES}")
+print(f"  Pairs:           {'ALL' if MAX_PAIRS is None else MAX_PAIRS}")
 print(f"  Epochs:          {SUPERVISED_EPOCHS}")
+print(f"  Batch size:      {SUPERVISED_BATCH_SIZE}")
 print(f"  LR:              {SUPERVISED_LR}")
+print(f"  Aug noise:       {AUGMENTATION_NOISE}")
 print(f"{'='*60}\n")

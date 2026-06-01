@@ -100,7 +100,7 @@ class SACAgent:
         self.critic_target.load_state_dict(self.critic.state_dict())
 
         # Auto-tuned entropy coefficient alpha
-        self.target_entropy = -float(action_dim)  # heuristic: -dim(A)
+        self.target_entropy = -float(action_dim) / 4.0  # less aggressive: ~-57 instead of -113
         self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
         self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
 
@@ -150,18 +150,27 @@ class SACAgent:
             q1_new, q2_new = self.critic(states, new_actions)
             q_new = torch.min(q1_new, q2_new)
 
-            actor_loss = (self.alpha.detach() * log_probs.unsqueeze(-1) - q_new).mean()
+            # L2 regularization toward zero action (identity prior)
+            # Light regularization — pretrained policy is already near good actions
+            action_reg = 0.0001 * (new_actions ** 2).mean()
+            actor_loss = (self.alpha.detach() * log_probs.unsqueeze(-1) - q_new).mean() + action_reg
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
             self.actor_optimizer.step()
 
-            # ── Alpha auto-tune ──
+            # ── Alpha auto-tune with floor ──
             alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()
 
             self.alpha_optimizer.zero_grad()
             alpha_loss.backward()
             self.alpha_optimizer.step()
+
+            # Enforce alpha minimum (prevent entropy death)
+            # Use clamp on log_alpha directly — more robust than conditional assignment
+            with torch.no_grad():
+                min_log_alpha = torch.tensor([np.log(ALPHA_MIN)], device=self.device)
+                self.log_alpha.data = torch.maximum(self.log_alpha.data, min_log_alpha)
 
             actor_loss_val = actor_loss.item()
             alpha_loss_val = alpha_loss.item()
