@@ -88,32 +88,13 @@ def extract_metrics_67d(audio):
 
 
 def compute_reward(mse, floor, initial_mse):
-    """Reward based on MSE improvement (delta-MSE) for single-step episodes.
+    """Reward based on absolute MSE on a fixed linear scale.
 
-    For single-step episodes, the agent gets one shot. We reward improvement
-    over the initial degraded state:
-        mse <= floor:   +1.0  (solved)
-        mse < init:     0.0 to +1.0 (proportional improvement)
-        mse == init:    0.0  (no change)
-        mse > init:     negative (made things worse)
+        mse == 1       → +1.0  (near-perfect restoration)
+        mse == 12000   → -1.0  (very wrong)
+        mse == 200     → ~+0.97 (close to zero, approximate)
     """
-    if mse <= floor:
-        return 1.0
-
-    floor = max(floor, 1e-6)
-    init = max(initial_mse, floor + 1e-6)
-
-    # Normalized improvement: 1.0 at floor, 0.0 at init, negative beyond
-    if mse <= init:
-        # Progress region: 0.0 (at init) to 1.0 (at floor)
-        log_ratio = np.log(mse / floor)
-        log_init_ratio = np.log(init / floor)
-        reward = 1.0 - (log_ratio / log_init_ratio)
-    else:
-        # Harm region: penalty beyond init
-        excess = (mse - init) / max(init, 1e-6)
-        reward = -np.tanh(excess * 2.0)
-
+    reward = 1.0 - (mse - 1.0) * 2.0 / 11999.0
     return float(np.clip(reward, -1.0, 1.0))
 
 

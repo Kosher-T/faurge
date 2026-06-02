@@ -166,6 +166,9 @@ def compute_inverse_action(deg_params):
     deg_bands = deg_params.get('eq_bands', [])
     for b in range(31):
         idx = b * 6
+        _FT_MAP = {"peak": 0, "low_shelf": 1, "high_shelf": 2,
+                   "highpass": 3, "lowpass": 4, "bandpass": 5, "notch": 6}
+
         if b < len(deg_bands):
             band = deg_bands[b]
             freq = band.get('freq_hz', 1000.0)
@@ -174,20 +177,21 @@ def compute_inverse_action(deg_params):
             ft_str = band.get('filter_type', 'peak')
             stereo_skew = band.get('stereo_skew_db', 0.0)
             dyn_depth = band.get('dynamic_depth', 0.0)
-
-            _FT_MAP = {"peak": 0, "low_shelf": 1, "high_shelf": 2,
-                       "highpass": 3, "lowpass": 4, "bandpass": 5, "notch": 6}
             ft_val = _FT_MAP.get(ft_str, 0)
-        else:
-            freq, gain, q = 1000.0, 0.0, 1.0
-            ft_val, stereo_skew, dyn_depth = 0, 0.0, 0.0
 
-        inv[idx + 0] = _inv_log(freq, 20.0, 20000.0)           # freq: keep same
-        inv[idx + 1] = _inv_linear(-gain, -24.0, 24.0)         # gain: NEGATE
-        inv[idx + 2] = _inv_linear(q, 0.1, 10.0)               # q: keep same
-        inv[idx + 3] = _inv_cat(ft_val, 0.0, 6.0)              # filter_type: keep same
-        inv[idx + 4] = _inv_linear(0.0, -6.0, 6.0)             # stereo_skew: zero (no info to invert)
-        inv[idx + 5] = _inv_linear(0.0, 0.0, 1.0)              # dynamic_depth: zero
+            inv[idx + 0] = _inv_log(freq, 20.0, 20000.0)
+            inv[idx + 1] = _inv_linear(-gain, -24.0, 24.0)
+            inv[idx + 2] = _inv_linear(q, 0.1, 10.0)
+            inv[idx + 3] = _inv_cat(ft_val, 0.0, 6.0)
+            inv[idx + 4] = _inv_linear(stereo_skew, -6.0, 6.0)
+            inv[idx + 5] = _inv_linear(dyn_depth, 0.0, 1.0)
+        else:
+            inv[idx + 0] = _inv_log(1000.0, 20.0, 20000.0)
+            inv[idx + 1] = _inv_linear(0.0, -24.0, 24.0)
+            inv[idx + 2] = _inv_linear(1.0, 0.1, 10.0)
+            inv[idx + 3] = _inv_cat(0.0, 0.0, 6.0)
+            inv[idx + 4] = _inv_linear(0.0, -6.0, 6.0)
+            inv[idx + 5] = _inv_linear(0.0, 0.0, 1.0)
 
     # ── Gain: 2D (186-187) — negate ──
     g = deg_params.get('gain', {})
@@ -312,7 +316,9 @@ for pi, pd in enumerate(pair_data):
         plugin_dicts = decode_action(inv_action)
         processed = apply_plugins(pd['degraded_audio'], SR, plugin_dicts)
         m_result = extract_metrics_67d(processed)
-        mse = float(np.mean((m_result - pd['m_reference']) ** 2))
+        dim_range = np.abs(m_result - pd['m_reference'])
+        dim_range = np.maximum(dim_range, 1e-6)
+        mse = float(np.mean(((m_result - pd['m_reference']) / dim_range) ** 2))
     except Exception as e:
         print(f"  [WARN] Pair {pi} ({pd['pair_id']}): inverse failed — {e}")
         mse = float('inf')

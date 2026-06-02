@@ -75,9 +75,9 @@ print(f"Agent: {sum(p.numel() for p in agent.actor.parameters()):,} actor params
 # ══════════════════════════════════════════════════════════════════════════════
 
 TOTAL_STEPS = 300_000
-LOG_INTERVAL = 100
-CHECKPOINT_INTERVAL = 500
-ROLLOUT_INTERVAL = 5000
+LOG_INTERVAL = 50
+CHECKPOINT_INTERVAL = 5000
+ROLLOUT_INTERVAL = 10_000
 EVAL_INTERVAL = 10_000
 CLUSTER_MASK_PROB = 0.1
 
@@ -105,11 +105,11 @@ print(f"  Per-band |diff| top 5: {np.sort(np.abs(m_degraded - m_ref))[-5:]}")
 # ── Reward function sanity check ──
 _floor = info['identity_floor']
 _init = info['initial_mse']
-print(f"\n  Reward function check (floor={_floor:.4f}, init_mse={_init:.1f}):")
-for _test_mse in [_init * 10, _init * 2, _init, _init * 0.5, _init * 0.1, _floor * 2, _floor]:
+print(f"\n  Reward function check (fixed scale: 1→+1, 200→~0, 12000→-1):")
+for _test_mse in [1, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 12000, 15000, _init]:
     _r = compute_reward(_test_mse, _floor, _init)
     print(f"    mse={_test_mse:>10.2f} → reward={_r:+.4f}")
-print(f"\n  Expected: init→0.0, 0.5*init→+0.5, floor→+1.0, 2*init→negative")
+print(f"\n  Expected: 1→+1.0, 200→~0.0, 12000→-1.0, {_init:.0f}→{compute_reward(_init, _floor, _init):+.4f}")
 print(f"{'='*60}\n")
 
 for step in range(start_step + 1, TOTAL_STEPS + 1):

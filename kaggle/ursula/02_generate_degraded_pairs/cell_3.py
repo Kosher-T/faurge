@@ -288,10 +288,9 @@ def randomEqBands():
             'freq_hz': round(float(freq), 1),
             'gain_db': round(random.uniform(-12, 12), 2),
             'q': round(random.uniform(0.1, 10), 2),
-            'filter_type': random.choice(['peak', 'low_shelf', 'high_shelf',
-                                          'highpass', 'lowpass', 'bandpass', 'notch']),
+            'filter_type': random.choice(['peak', 'low_shelf', 'high_shelf']),
             'stereo_skew_db': 0.0,
-            'dynamic_depth': round(random.uniform(0, 1), 2),
+            'dynamic_depth': 0.0,
         }
         bands.append(band)
     return bands
