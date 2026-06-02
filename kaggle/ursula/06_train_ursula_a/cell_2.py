@@ -95,34 +95,12 @@ for _b in range(31):
         _PR(f"eq_band{_b+1}_dynamic_depth", 0.0, 1.0),
     ])
 _ALL = _eq + [
-    _PR("comp_threshold", -60.0, 0.0), _PR("comp_ratio", 1.0, 20.0),
-    _PR("comp_attack", 0.1, 100.0), _PR("comp_release", 10.0, 1000.0),
-    _PR("comp_knee", 0.0, 12.0), _PR("comp_lookahead", 0.0, 10.0),
-    _PR("comp_hold", 0.0, 200.0), _PR("comp_wet_dry", 0.0, 1.0),
-    _PR("comp_stereo_link", 0.0, 1.0), _PR("comp_sidechain_hp", 20.0, 500.0),
-    _PR("comp_sidechain_lp", 500.0, 20000.0, log=True),
-    _PR("comp_saturate_drive", 0.0, 12.0), _PR("comp_output_trim", -12.0, 12.0),
-    _PR("comp_detector_type", 0.0, 3.0),
-    _PR("esser_center", 4000.0, 10000.0, log=True), _PR("esser_threshold", -60.0, 0.0),
-    _PR("esser_ratio", 0.25, 20.0), _PR("esser_bandwidth", 500.0, 4000.0, log=True),
-    _PR("esser_attack", 0.1, 50.0), _PR("esser_release", 10.0, 500.0),
-    _PR("sat_drive", 0.0, 24.0), _PR("sat_mix", 0.0, 1.0),
-    _PR("sat_type", 0.0, 3.0), _PR("sat_hpf", 20.0, 500.0),
-    _PR("sat_lpf", 2000.0, 20000.0, log=True), _PR("sat_oversampling", 0.0, 3.0),
-    _PR("sat_output_trim", -12.0, 12.0),
-    _PR("lim_ceiling", -12.0, 0.0), _PR("lim_release", 1.0, 500.0),
-    _PR("lim_lookahead", 0.0, 10.0), _PR("lim_clip_mode", 0.0, 1.0),
-    _PR("lim_stereo_link", 0.0, 1.0), _PR("lim_oversampling", 0.0, 3.0),
-    _PR("trans_attack_gain", -24.0, 24.0), _PR("trans_sustain_gain", -24.0, 24.0),
-    _PR("trans_attack_time", 0.1, 50.0), _PR("trans_release_time", 10.0, 500.0),
-    _PR("trans_sensitivity", -30.0, 0.0), _PR("trans_mix", 0.0, 1.0),
     _PR("gain_db", -12.0, 12.0), _PR("stereo_balance", -1.0, 1.0),
 ]
 _LOWS = np.array([p.low for p in _ALL], dtype=np.float32)
 _HIGHS = np.array([p.high for p in _ALL], dtype=np.float32)
 _IS_LOG = np.array([p.log for p in _ALL], dtype=bool)
 _CAT = set(range(2, 186, 6))
-_CAT.update([186+13, 206+2, 206+5, 213+3, 213+5])
 
 
 def decode_action(action):
@@ -136,9 +114,6 @@ def decode_action(action):
     vals[ca_a] = np.clip(np.round((action[ca_a] + 1.0) * 0.5 * (_HIGHS[ca_a] - _LOWS[ca_a]) + _LOWS[ca_a]), _LOWS[ca_a], _HIGHS[ca_a])
     params = {p.name: vals[i] for i, p in enumerate(_ALL)}
     _FT = ["peak","low_shelf","high_shelf","highpass","lowpass","bandpass","notch"]
-    _DT = ["RMS","peak","feed_forward","feed_back"]
-    _ST = ["tube","tape","diode","asymmetric"]
-    _OS = [1,2,4,8]; _CM = ["hard","soft"]
     eq = []
     for b in range(31):
         fi = max(0, min(6, int(round(params[f"eq_band{b+1}_filter_type"]))))
@@ -146,49 +121,13 @@ def decode_action(action):
                     "q": float(params[f"eq_band{b+1}_q"]), "filter_type": _FT[fi],
                     "stereo_skew_db": float(params[f"eq_band{b+1}_stereo_skew"]),
                     "dynamic_depth": float(params[f"eq_band{b+1}_dynamic_depth"])})
-    di = max(0, min(3, int(round(params["comp_detector_type"]))))
-    comp = {"threshold_db": float(params["comp_threshold"]), "ratio": float(params["comp_ratio"]),
-            "attack_ms": float(params["comp_attack"]), "release_ms": float(params["comp_release"]),
-            "knee_db": float(params["comp_knee"]), "lookahead_ms": float(params["comp_lookahead"]),
-            "hold_ms": float(params["comp_hold"]), "wet_dry_mix": float(params["comp_wet_dry"]),
-            "stereo_link": float(params["comp_stereo_link"]),
-            "sidechain_hp_hz": float(params["comp_sidechain_hp"]),
-            "sidechain_lp_hz": float(params["comp_sidechain_lp"]),
-            "saturate_drive_db": float(params["comp_saturate_drive"]),
-            "output_trim_db": float(params["comp_output_trim"]), "detector_type": _DT[di]}
-    esser = {"center_freq_hz": float(params["esser_center"]), "threshold_db": float(params["esser_threshold"]),
-             "ratio": float(params["esser_ratio"]), "bandwidth_hz": float(params["esser_bandwidth"]),
-             "attack_ms": float(params["esser_attack"]), "release_ms": float(params["esser_release"])}
-    sti = max(0, min(3, int(round(params["sat_type"]))))
-    soi = max(0, min(3, int(round(params["sat_oversampling"]))))
-    sat = {"drive_db": float(params["sat_drive"]), "mix": float(params["sat_mix"]),
-           "sat_type": _ST[sti], "hpf_hz": float(params["sat_hpf"]),
-           "lpf_hz": float(params["sat_lpf"]), "oversampling": _OS[soi],
-           "output_trim_db": float(params["sat_output_trim"])}
-    lci = max(0, min(1, int(round(params["lim_clip_mode"]))))
-    loi = max(0, min(3, int(round(params["lim_oversampling"]))))
-    lim = {"ceiling_db": float(params["lim_ceiling"]), "release_ms": float(params["lim_release"]),
-           "lookahead_ms": float(params["lim_lookahead"]), "clip_mode": _CM[lci],
-           "stereo_link": float(params["lim_stereo_link"]), "oversampling": _OS[loi]}
-    trans = {"attack_gain_db": float(params["trans_attack_gain"]),
-             "sustain_gain_db": float(params["trans_sustain_gain"]),
-             "attack_time_ms": float(params["trans_attack_time"]),
-             "release_time_ms": float(params["trans_release_time"]),
-             "sensitivity_db": float(params["trans_sensitivity"]),
-             "mix": float(params["trans_mix"])}
     g = {"gain_db": float(params["gain_db"]), "stereo_balance": float(params["stereo_balance"])}
-    return {"eq": eq, "compressor": comp, "esser": esser, "saturator": sat,
-            "limiter": lim, "transient": trans, "gain": g}
+    return {"eq": eq, "gain": g}
 
 
 def apply_plugins(audio, sr, plugin_dicts):
     result = audio.copy()
     result, _ = equalizer.process(result, sr, bands=plugin_dicts['eq'])
-    result, _ = compressor.process(result, sr, **plugin_dicts['compressor'])
-    result, _ = esser.process(result, sr, **plugin_dicts['esser'])
-    result, _ = saturator.process(result, sr, **plugin_dicts['saturator'])
-    result, _ = limiter.process(result, sr, **plugin_dicts['limiter'])
-    result, _ = transient.process(result, sr, **plugin_dicts['transient'])
     result, _ = gain1.process(result, sr=sr, **plugin_dicts['gain'])
     return result
 
@@ -217,12 +156,7 @@ def compute_inverse_action(deg_params):
     """Convert degradation parameters to an approximate inverse action vector.
 
     Strategy:
-    - EQ: negate gain_db (exact inverse for linear EQ)
-    - Compressor: disable (threshold=0, ratio=1, wet_dry=0)
-    - Esser: disable (threshold=0)
-    - Saturator: disable (drive=0, mix=0)
-    - Limiter: disable (ceiling=0)
-    - Transient: negate gains
+    - EQ: negate gain_db (exact inverse for linear EQ), keep freq/Q/filter_type
     - Gain: negate gain_db
     """
     inv = np.zeros(OUTPUT_DIM, dtype=np.float32)
@@ -255,64 +189,10 @@ def compute_inverse_action(deg_params):
         inv[idx + 4] = _inv_linear(0.0, -6.0, 6.0)             # stereo_skew: zero (no info to invert)
         inv[idx + 5] = _inv_linear(0.0, 0.0, 1.0)              # dynamic_depth: zero
 
-    # ── Compressor: 14D (186-199) — disable ──
-    comp = deg_params.get('compressor', {})
-    inv[186] = _inv_linear(0.0, -60.0, 0.0)        # threshold: 0 dB (max = no compression)
-    inv[187] = _inv_linear(1.0, 1.0, 20.0)         # ratio: 1:1 (unity = no compression)
-    inv[188] = _inv_linear(comp.get('attack_ms', 10.0), 0.1, 100.0)   # attack: keep same
-    inv[189] = _inv_linear(comp.get('release_ms', 100.0), 10.0, 1000.0)  # release: keep same
-    inv[190] = _inv_linear(comp.get('knee_db', 6.0), 0.0, 12.0)      # knee: keep same
-    inv[191] = _inv_linear(comp.get('lookahead_ms', 0.0), 0.0, 10.0) # lookahead: keep same
-    inv[192] = _inv_linear(comp.get('hold_ms', 0.0), 0.0, 200.0)     # hold: keep same
-    inv[193] = _inv_linear(0.0, 0.0, 1.0)          # wet_dry: 0 (fully dry = bypass)
-    inv[194] = _inv_linear(comp.get('stereo_link', 0.0), 0.0, 1.0)   # stereo_link: keep same
-    inv[195] = _inv_linear(comp.get('sidechain_hp_hz', 20.0), 20.0, 500.0)
-    inv[196] = _inv_log(comp.get('sidechain_lp_hz', 20000.0), 500.0, 20000.0)
-    inv[197] = _inv_linear(comp.get('saturate_drive_db', 0.0), 0.0, 12.0)
-    inv[198] = _inv_linear(comp.get('output_trim_db', 0.0), -12.0, 12.0)
-    inv[199] = _inv_cat(comp.get('detector_type', 0), 0.0, 3.0)  # detector_type: keep same
-
-    # ── Esser: 6D (200-205) — disable ──
-    ess = deg_params.get('esser', {})
-    inv[200] = _inv_log(ess.get('center_freq_hz', 6000.0), 4000.0, 10000.0)
-    inv[201] = _inv_linear(0.0, -60.0, 0.0)        # threshold: 0 (max = no reduction)
-    inv[202] = _inv_linear(1.0, 0.25, 20.0)        # ratio: 1:1 (unity = no reduction)
-    inv[203] = _inv_log(ess.get('bandwidth_hz', 2000.0), 500.0, 4000.0)
-    inv[204] = _inv_linear(ess.get('attack_ms', 5.0), 0.1, 50.0)
-    inv[205] = _inv_linear(ess.get('release_ms', 50.0), 10.0, 500.0)
-
-    # ── Saturator: 7D (206-212) — disable ──
-    sat = deg_params.get('saturator', {})
-    inv[206] = _inv_linear(0.0, 0.0, 24.0)         # drive: 0 (no saturation)
-    inv[207] = _inv_linear(0.0, 0.0, 1.0)          # mix: 0 (fully dry)
-    inv[208] = _inv_cat(0.0, 0.0, 3.0)             # type: tube (keep same)
-    inv[209] = _inv_linear(sat.get('hpf_hz', 80.0), 20.0, 500.0)
-    inv[210] = _inv_log(sat.get('lpf_hz', 18000.0), 2000.0, 20000.0)
-    inv[211] = _inv_cat(1.0, 0.0, 3.0)             # oversampling: 1x
-    inv[212] = _inv_linear(sat.get('output_trim_db', 0.0), -12.0, 12.0)
-
-    # ── Limiter: 6D (213-218) — disable ──
-    lim = deg_params.get('limiter', {})
-    inv[213] = _inv_linear(0.0, -12.0, 0.0)        # ceiling: 0 dB (max = no limiting)
-    inv[214] = _inv_linear(lim.get('release_ms', 50.0), 1.0, 500.0)
-    inv[215] = _inv_linear(lim.get('lookahead_ms', 0.0), 0.0, 10.0)
-    inv[216] = _inv_cat(0.0, 0.0, 1.0)             # clip_mode: hard (keep same)
-    inv[217] = _inv_linear(lim.get('stereo_link', 0.0), 0.0, 1.0)
-    inv[218] = _inv_cat(1.0, 0.0, 3.0)             # oversampling: 1x
-
-    # ── Transient: 6D (219-224) — negate gains ──
-    trans = deg_params.get('transient', {})
-    inv[219] = _inv_linear(-trans.get('attack_gain_db', 0.0), -24.0, 24.0)   # negate
-    inv[220] = _inv_linear(-trans.get('sustain_gain_db', 0.0), -24.0, 24.0)  # negate
-    inv[221] = _inv_linear(trans.get('attack_time_ms', 5.0), 0.1, 50.0)
-    inv[222] = _inv_linear(trans.get('release_time_ms', 50.0), 10.0, 500.0)
-    inv[223] = _inv_linear(trans.get('sensitivity_db', -15.0), -30.0, 0.0)
-    inv[224] = _inv_linear(trans.get('mix', 0.5), 0.0, 1.0)
-
-    # ── Gain: 2D (225-226) — negate ──
+    # ── Gain: 2D (186-187) — negate ──
     g = deg_params.get('gain', {})
-    inv[225] = _inv_linear(-g.get('gain_db', 0.0), -12.0, 12.0)   # negate
-    inv[226] = _inv_linear(-g.get('stereo_balance', 0.0), -1.0, 1.0)  # negate
+    inv[186] = _inv_linear(-g.get('gain_db', 0.0), -12.0, 12.0)   # negate
+    inv[187] = _inv_linear(-g.get('stereo_balance', 0.0), -1.0, 1.0)  # negate
 
     return np.clip(inv, -1.0, 1.0)
 
@@ -413,7 +293,7 @@ print(f"\n{'='*60}")
 print(f"  INVERSE DEGRADATION: computing targets for {len(pair_data)} pairs")
 print(f"{'='*60}")
 
-supervised_data = []  # (observation_143d, target_action_227d, mse)
+supervised_data = []  # (observation_143d, target_action_188d, mse)
 
 for pi, pd in enumerate(pair_data):
     # Build observation

@@ -118,7 +118,7 @@ def compute_reward(mse, floor, initial_mse):
 
 
 def decode_action(action):
-    """Decode 227D action → per-plugin config dicts (from Phase 5)."""
+    """Decode 188D action → per-plugin config dicts (EQ + Gain only)."""
     from dataclasses import dataclass as _dc
 
     @_dc(frozen=True)
@@ -136,27 +136,6 @@ def decode_action(action):
             _PR(f"eq_band{_b+1}_dynamic_depth", 0.0, 1.0),
         ])
     _all = _eq + [
-        _PR("comp_threshold", -60.0, 0.0), _PR("comp_ratio", 1.0, 20.0),
-        _PR("comp_attack", 0.1, 100.0), _PR("comp_release", 10.0, 1000.0),
-        _PR("comp_knee", 0.0, 12.0), _PR("comp_lookahead", 0.0, 10.0),
-        _PR("comp_hold", 0.0, 200.0), _PR("comp_wet_dry", 0.0, 1.0),
-        _PR("comp_stereo_link", 0.0, 1.0), _PR("comp_sidechain_hp", 20.0, 500.0),
-        _PR("comp_sidechain_lp", 500.0, 20000.0, log=True),
-        _PR("comp_saturate_drive", 0.0, 12.0), _PR("comp_output_trim", -12.0, 12.0),
-        _PR("comp_detector_type", 0.0, 3.0),
-        _PR("esser_center", 4000.0, 10000.0, log=True), _PR("esser_threshold", -60.0, 0.0),
-        _PR("esser_ratio", 0.25, 20.0), _PR("esser_bandwidth", 500.0, 4000.0, log=True),
-        _PR("esser_attack", 0.1, 50.0), _PR("esser_release", 10.0, 500.0),
-        _PR("sat_drive", 0.0, 24.0), _PR("sat_mix", 0.0, 1.0),
-        _PR("sat_type", 0.0, 3.0), _PR("sat_hpf", 20.0, 500.0),
-        _PR("sat_lpf", 2000.0, 20000.0, log=True), _PR("sat_oversampling", 0.0, 3.0),
-        _PR("sat_output_trim", -12.0, 12.0),
-        _PR("lim_ceiling", -12.0, 0.0), _PR("lim_release", 1.0, 500.0),
-        _PR("lim_lookahead", 0.0, 10.0), _PR("lim_clip_mode", 0.0, 1.0),
-        _PR("lim_stereo_link", 0.0, 1.0), _PR("lim_oversampling", 0.0, 3.0),
-        _PR("trans_attack_gain", -24.0, 24.0), _PR("trans_sustain_gain", -24.0, 24.0),
-        _PR("trans_attack_time", 0.1, 50.0), _PR("trans_release_time", 10.0, 500.0),
-        _PR("trans_sensitivity", -30.0, 0.0), _PR("trans_mix", 0.0, 1.0),
         _PR("gain_db", -12.0, 12.0), _PR("stereo_balance", -1.0, 1.0),
     ]
     lows = np.array([p.low for p in _all], dtype=np.float32)
@@ -164,8 +143,6 @@ def decode_action(action):
     is_log = np.array([p.log for p in _all], dtype=bool)
 
     _CAT = set(range(2, 186, 6))
-    _CAT.add(186 + 13); _CAT.add(206 + 2); _CAT.add(206 + 5)
-    _CAT.add(213 + 3); _CAT.add(213 + 5)
 
     vals = np.zeros_like(action)
     cont = np.array([i not in _CAT and not is_log[i] for i in range(OUTPUT_DIM)])
@@ -178,9 +155,6 @@ def decode_action(action):
 
     params = {p.name: vals[i] for i, p in enumerate(_all)}
     _FT = ["peak", "low_shelf", "high_shelf", "highpass", "lowpass", "bandpass", "notch"]
-    _DT = ["RMS", "peak", "feed_forward", "feed_back"]
-    _ST = ["tube", "tape", "diode", "asymmetric"]
-    _OS = [1, 2, 4, 8]; _CM = ["hard", "soft"]
 
     eq = []
     for b in range(31):
@@ -189,50 +163,14 @@ def decode_action(action):
                     "q": float(params[f"eq_band{b+1}_q"]), "filter_type": _FT[fi],
                     "stereo_skew_db": float(params[f"eq_band{b+1}_stereo_skew"]),
                     "dynamic_depth": float(params[f"eq_band{b+1}_dynamic_depth"])})
-    di = max(0, min(3, int(round(params["comp_detector_type"]))))
-    comp = {"threshold_db": float(params["comp_threshold"]), "ratio": float(params["comp_ratio"]),
-            "attack_ms": float(params["comp_attack"]), "release_ms": float(params["comp_release"]),
-            "knee_db": float(params["comp_knee"]), "lookahead_ms": float(params["comp_lookahead"]),
-            "hold_ms": float(params["comp_hold"]), "wet_dry_mix": float(params["comp_wet_dry"]),
-            "stereo_link": float(params["comp_stereo_link"]),
-            "sidechain_hp_hz": float(params["comp_sidechain_hp"]),
-            "sidechain_lp_hz": float(params["comp_sidechain_lp"]),
-            "saturate_drive_db": float(params["comp_saturate_drive"]),
-            "output_trim_db": float(params["comp_output_trim"]), "detector_type": _DT[di]}
-    esser = {"center_freq_hz": float(params["esser_center"]), "threshold_db": float(params["esser_threshold"]),
-             "ratio": float(params["esser_ratio"]), "bandwidth_hz": float(params["esser_bandwidth"]),
-             "attack_ms": float(params["esser_attack"]), "release_ms": float(params["esser_release"])}
-    sti = max(0, min(3, int(round(params["sat_type"]))))
-    soi = max(0, min(3, int(round(params["sat_oversampling"]))))
-    sat = {"drive_db": float(params["sat_drive"]), "mix": float(params["sat_mix"]),
-           "sat_type": _ST[sti], "hpf_hz": float(params["sat_hpf"]),
-           "lpf_hz": float(params["sat_lpf"]), "oversampling": _OS[soi],
-           "output_trim_db": float(params["sat_output_trim"])}
-    lci = max(0, min(1, int(round(params["lim_clip_mode"]))))
-    loi = max(0, min(3, int(round(params["lim_oversampling"]))))
-    lim = {"ceiling_db": float(params["lim_ceiling"]), "release_ms": float(params["lim_release"]),
-           "lookahead_ms": float(params["lim_lookahead"]), "clip_mode": _CM[lci],
-           "stereo_link": float(params["lim_stereo_link"]), "oversampling": _OS[loi]}
-    trans = {"attack_gain_db": float(params["trans_attack_gain"]),
-             "sustain_gain_db": float(params["trans_sustain_gain"]),
-             "attack_time_ms": float(params["trans_attack_time"]),
-             "release_time_ms": float(params["trans_release_time"]),
-             "sensitivity_db": float(params["trans_sensitivity"]),
-             "mix": float(params["trans_mix"])}
     g = {"gain_db": float(params["gain_db"]), "stereo_balance": float(params["stereo_balance"])}
 
-    return {"eq": eq, "compressor": comp, "esser": esser, "saturator": sat,
-            "limiter": lim, "transient": trans, "gain": g}
+    return {"eq": eq, "gain": g}
 
 
 def apply_plugins(audio, sr, plugin_dicts):
     result = audio.copy()
     result, _ = equalizer.process(result, sr, bands=plugin_dicts['eq'])
-    result, _ = compressor.process(result, sr, **plugin_dicts['compressor'])
-    result, _ = esser.process(result, sr, **plugin_dicts['esser'])
-    result, _ = saturator.process(result, sr, **plugin_dicts['saturator'])
-    result, _ = limiter.process(result, sr, **plugin_dicts['limiter'])
-    result, _ = transient.process(result, sr, **plugin_dicts['transient'])
     result, _ = gain1.process(result, sr=sr, **plugin_dicts['gain'])
     return result
 

@@ -2,15 +2,16 @@
 # ## Tests & Export
 #
 # Comprehensive validation suite:
-# 1. Shape test — random 143D → 227D in [-1, 1]
+# 1. Shape test — random 143D → 188D in [-1, 1]
 # 2. Range test — unnormalized params in their respective bounds
 # 3. Encode/decode roundtrip
 # 4. Identity test — M_degraded == M_reference → near-identity output
 # 5. Cluster conditioning — different one-hots → different outputs
-# 6. SAC actor forward + gradient flow
-# 7. SAC critic forward + q_min
-# 8. Parameter count report
-# 9. Export to /kaggle/working/
+# 6. Extreme difference — dark degraded vs bright reference → EQ shifts toward bright
+# 7. SAC actor forward + gradient flow
+# 8. SAC critic forward + q_min
+# 9. Parameter count report
+# 10. Export to /kaggle/working/
 
 t_total = time.time()
 
@@ -84,9 +85,7 @@ with torch.no_grad():
 
 ident_params = ActionUnnormalizer.decode(ident_out)
 gain_db = ident_params["gain_db"].item()
-comp_ratio = ident_params["comp_ratio"].item()
-sat_drive = ident_params["sat_drive"].item()
-print(f"  gain_db={gain_db:.2f} dB, comp_ratio={comp_ratio:.2f}, sat_drive={sat_drive:.2f} dB")
+print(f"  gain_db={gain_db:.2f} dB")
 
 assert abs(gain_db) < 5.0, f"Identity test: gain_db={gain_db:.2f} (expected near 0)"
 print(f"  [PASS] Identity test: gain_db near 0 ({gain_db:.2f} dB)")
@@ -230,7 +229,7 @@ import inspect, textwrap
 # Build the complete module source
 EXPORT_SOURCE = '''\"\"\"
 agents/ursula.py — Ursula Policy Network & SAC Wrappers
-========================================================
+=======================================================
 
 Pure PyTorch implementation of Ursula's DSP policy network.
 No Kaggle dependency — runs entirely locally.
@@ -238,21 +237,16 @@ No Kaggle dependency — runs entirely locally.
 Architecture
 ------------
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
-Output: 227D  (tanh-activated, scaled to each plugin parameter\'s real range)
+Output: 188D  (tanh-activated, scaled to each plugin parameter\'s real range)
 
 Hidden:  LayerNorm(143) → Linear(143, 512) → ReLU → Dropout(0.1)
          Linear(512, 512) → ReLU → Dropout(0.1) + Residual(skip)
          Linear(512, 256) → ReLU
-         Plugin Heads → 7 separate Linear layers → Tanh
+         Plugin Heads → 2 separate Linear layers → Tanh
 
-The 227D output maps to 7 DSP plugins in cascade order:
+The 188D output maps to 2 DSP plugins in cascade order:
   1. EQ         (31 bands × 6 params = 186D)
-  2. Compressor (14D)
-  3. Esser      (6D)
-  4. Saturator  (7D)
-  5. Limiter    (6D)
-  6. Transient  (6D)
-  7. Gain       (2D)
+  2. Gain       (2D)
 
 Usage
 -----
@@ -261,7 +255,7 @@ Usage
 
     policy = UrsulaPolicy()
     x = torch.randn(1, 143)
-    raw_out = policy(x)          # (1, 227) in [-1, 1]
+    raw_out = policy(x)          # (1, 188) in [-1, 1]
     params = ActionUnnormalizer.decode(raw_out)
 \"\"\"
 
@@ -279,7 +273,7 @@ import torch.nn.functional as F
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 INPUT_DIM = 143       # 67 + 67 + 9
-OUTPUT_DIM = 227      # all plugin params flattened
+OUTPUT_DIM = 188      # EQ 186D + Gain 2D
 N_CLUSTERS = 8        # K voice clusters
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1  # +1 for "unknown"
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1
@@ -306,69 +300,13 @@ for _b in range(31):
         ParamRange(f"eq_band{_b+1}_dynamic_depth", 0.0,          1.0),
     ])
 
-COMP_PARAM_RANGES = [
-    ParamRange("comp_threshold",      -60.0,     0.0),
-    ParamRange("comp_ratio",           1.0,     20.0),
-    ParamRange("comp_attack",          0.1,    100.0),
-    ParamRange("comp_release",        10.0,   1000.0),
-    ParamRange("comp_knee",            0.0,     12.0),
-    ParamRange("comp_lookahead",       0.0,     10.0),
-    ParamRange("comp_hold",            0.0,    200.0),
-    ParamRange("comp_wet_dry",         0.0,      1.0),
-    ParamRange("comp_stereo_link",     0.0,      1.0),
-    ParamRange("comp_sidechain_hp",   20.0,    500.0),
-    ParamRange("comp_sidechain_lp",  500.0,  20_000.0, log=True),
-    ParamRange("comp_saturate_drive",  0.0,     12.0),
-    ParamRange("comp_output_trim",   -12.0,     12.0),
-    ParamRange("comp_detector_type",   0.0,      3.0),
-]
-
-ESSER_PARAM_RANGES = [
-    ParamRange("esser_center",       4000.0,  10_000.0, log=True),
-    ParamRange("esser_threshold",    -60.0,      0.0),
-    ParamRange("esser_ratio",          0.25,    20.0),
-    ParamRange("esser_bandwidth",    500.0,   4000.0, log=True),
-    ParamRange("esser_attack",         0.1,     50.0),
-    ParamRange("esser_release",       10.0,    500.0),
-]
-
-SAT_PARAM_RANGES = [
-    ParamRange("sat_drive",           0.0,     24.0),
-    ParamRange("sat_mix",             0.0,      1.0),
-    ParamRange("sat_type",            0.0,      3.0),
-    ParamRange("sat_hpf",            20.0,    500.0),
-    ParamRange("sat_lpf",          2000.0,  20_000.0, log=True),
-    ParamRange("sat_oversampling",    0.0,      3.0),
-    ParamRange("sat_output_trim",   -12.0,     12.0),
-]
-
-LIM_PARAM_RANGES = [
-    ParamRange("lim_ceiling",       -12.0,      0.0),
-    ParamRange("lim_release",         1.0,    500.0),
-    ParamRange("lim_lookahead",       0.0,     10.0),
-    ParamRange("lim_clip_mode",       0.0,      1.0),
-    ParamRange("lim_stereo_link",     0.0,      1.0),
-    ParamRange("lim_oversampling",    0.0,      3.0),
-]
-
-TRANS_PARAM_RANGES = [
-    ParamRange("trans_attack_gain",  -24.0,     24.0),
-    ParamRange("trans_sustain_gain", -24.0,     24.0),
-    ParamRange("trans_attack_time",    0.1,     50.0),
-    ParamRange("trans_release_time",  10.0,    500.0),
-    ParamRange("trans_sensitivity",  -30.0,      0.0),
-    ParamRange("trans_mix",            0.0,      1.0),
-]
-
 GAIN_PARAM_RANGES = [
     ParamRange("gain_db",           -12.0,     12.0),
     ParamRange("stereo_balance",     -1.0,      1.0),
 ]
 
 ALL_PARAM_RANGES: List[ParamRange] = (
-    EQ_PARAM_RANGES + COMP_PARAM_RANGES + ESSER_PARAM_RANGES
-    + SAT_PARAM_RANGES + LIM_PARAM_RANGES + TRANS_PARAM_RANGES
-    + GAIN_PARAM_RANGES
+    EQ_PARAM_RANGES + GAIN_PARAM_RANGES
 )
 
 assert len(ALL_PARAM_RANGES) == OUTPUT_DIM, (
@@ -382,15 +320,14 @@ PLUGIN_SLICES: Dict[str, Tuple[int, int]] = {}
 PLUGIN_HEAD_DIMS: Dict[str, int] = {}
 _offset = 0
 for _name, _count in [
-    ("eq", 31 * 6), ("compressor", 14), ("esser", 6),
-    ("saturator", 7), ("limiter", 6), ("transient", 6), ("gain", 2),
+    ("eq", 31 * 6), ("gain", 2),
 ]:
     PLUGIN_SLICES[_name] = (_offset, _offset + _count)
     PLUGIN_HEAD_DIMS[_name] = _count
     _offset += _count
 
 PLUGIN_HEAD_ORDER: List[str] = [
-    "eq", "compressor", "esser", "saturator", "limiter", "transient", "gain",
+    "eq", "gain",
 ]
 
 
@@ -398,11 +335,6 @@ PLUGIN_HEAD_ORDER: List[str] = [
 
 CATEGORICAL_INDICES: Dict[str, List[int]] = {
     "eq_filter_type": list(range(2, 186, 6)),
-    "comp_detector_type": [186 + 13],
-    "sat_type": [206 + 2],
-    "sat_oversampling": [206 + 5],
-    "lim_clip_mode": [213 + 3],
-    "lim_oversampling": [213 + 5],
 }
 
 
@@ -462,11 +394,6 @@ class UrsulaPolicy(nn.Module):
         gain_head = self.plugin_heads["gain"]
         nn.init.zeros_(gain_head.weight)
         nn.init.zeros_(gain_head.bias)
-
-        comp_head = self.plugin_heads["compressor"]
-        with torch.no_grad():
-            target_raw = (1.0 * 2.0 / (20.0 - 1.0)) - 1.0
-            comp_head.bias[1] = math.atanh(max(min(target_raw, 0.99), -0.99))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.trunk_norm(x)
@@ -577,77 +504,13 @@ class ActionUnnormalizer:
                 "dynamic_depth": params[f"eq_band{b+1}_dynamic_depth"].item() if batch_size == 1 else params[f"eq_band{b+1}_dynamic_depth"],
             })
 
-        _DETECT_TYPES = ["RMS", "peak", "feed_forward", "feed_back"]
-        comp_det = params["comp_detector_type"]
-        comp = {
-            "threshold_db": params["comp_threshold"].item() if batch_size == 1 else params["comp_threshold"],
-            "ratio": params["comp_ratio"].item() if batch_size == 1 else params["comp_ratio"],
-            "attack_ms": params["comp_attack"].item() if batch_size == 1 else params["comp_attack"],
-            "release_ms": params["comp_release"].item() if batch_size == 1 else params["comp_release"],
-            "knee_db": params["comp_knee"].item() if batch_size == 1 else params["comp_knee"],
-            "lookahead_ms": params["comp_lookahead"].item() if batch_size == 1 else params["comp_lookahead"],
-            "hold_ms": params["comp_hold"].item() if batch_size == 1 else params["comp_hold"],
-            "wet_dry_mix": params["comp_wet_dry"].item() if batch_size == 1 else params["comp_wet_dry"],
-            "stereo_link": params["comp_stereo_link"].item() if batch_size == 1 else params["comp_stereo_link"],
-            "sidechain_hp_hz": params["comp_sidechain_hp"].item() if batch_size == 1 else params["comp_sidechain_hp"],
-            "sidechain_lp_hz": params["comp_sidechain_lp"].item() if batch_size == 1 else params["comp_sidechain_lp"],
-            "saturate_drive_db": params["comp_saturate_drive"].item() if batch_size == 1 else params["comp_saturate_drive"],
-            "output_trim_db": params["comp_output_trim"].item() if batch_size == 1 else params["comp_output_trim"],
-            "detector_type": _DETECT_TYPES[int(comp_det.round().clamp(0, 3).item())] if batch_size == 1 else _DETECT_TYPES,
-        }
-
-        esser = {
-            "center_freq_hz": params["esser_center"].item() if batch_size == 1 else params["esser_center"],
-            "threshold_db": params["esser_threshold"].item() if batch_size == 1 else params["esser_threshold"],
-            "ratio": params["esser_ratio"].item() if batch_size == 1 else params["esser_ratio"],
-            "bandwidth_hz": params["esser_bandwidth"].item() if batch_size == 1 else params["esser_bandwidth"],
-            "attack_ms": params["esser_attack"].item() if batch_size == 1 else params["esser_attack"],
-            "release_ms": params["esser_release"].item() if batch_size == 1 else params["esser_release"],
-        }
-
-        _SAT_TYPES = ["tube", "tape", "diode", "asymmetric"]
-        _OS_TYPES = [1, 2, 4, 8]
-        sat_type = params["sat_type"]
-        sat_os = params["sat_oversampling"]
-        sat = {
-            "drive_db": params["sat_drive"].item() if batch_size == 1 else params["sat_drive"],
-            "mix": params["sat_mix"].item() if batch_size == 1 else params["sat_mix"],
-            "sat_type": _SAT_TYPES[int(sat_type.round().clamp(0, 3).item())] if batch_size == 1 else _SAT_TYPES,
-            "hpf_hz": params["sat_hpf"].item() if batch_size == 1 else params["sat_hpf"],
-            "lpf_hz": params["sat_lpf"].item() if batch_size == 1 else params["sat_lpf"],
-            "oversampling": _OS_TYPES[int(sat_os.round().clamp(0, 3).item())] if batch_size == 1 else _OS_TYPES,
-            "output_trim_db": params["sat_output_trim"].item() if batch_size == 1 else params["sat_output_trim"],
-        }
-
-        _CLIP_MODES = ["hard", "soft"]
-        lim_clip = params["lim_clip_mode"]
-        lim_os = params["lim_oversampling"]
-        lim = {
-            "ceiling_db": params["lim_ceiling"].item() if batch_size == 1 else params["lim_ceiling"],
-            "release_ms": params["lim_release"].item() if batch_size == 1 else params["lim_release"],
-            "lookahead_ms": params["lim_lookahead"].item() if batch_size == 1 else params["lim_lookahead"],
-            "clip_mode": _CLIP_MODES[int(lim_clip.round().clamp(0, 1).item())] if batch_size == 1 else _CLIP_MODES,
-            "stereo_link": params["lim_stereo_link"].item() if batch_size == 1 else params["lim_stereo_link"],
-            "oversampling": _OS_TYPES[int(lim_os.round().clamp(0, 3).item())] if batch_size == 1 else _OS_TYPES,
-        }
-
-        trans = {
-            "attack_gain_db": params["trans_attack_gain"].item() if batch_size == 1 else params["trans_attack_gain"],
-            "sustain_gain_db": params["trans_sustain_gain"].item() if batch_size == 1 else params["trans_sustain_gain"],
-            "attack_time_ms": params["trans_attack_time"].item() if batch_size == 1 else params["trans_attack_time"],
-            "release_time_ms": params["trans_release_time"].item() if batch_size == 1 else params["trans_release_time"],
-            "sensitivity_db": params["trans_sensitivity"].item() if batch_size == 1 else params["trans_sensitivity"],
-            "mix": params["trans_mix"].item() if batch_size == 1 else params["trans_mix"],
-        }
-
         g = {
             "gain_db": params["gain_db"].item() if batch_size == 1 else params["gain_db"],
             "stereo_balance": params["stereo_balance"].item() if batch_size == 1 else params["stereo_balance"],
         }
 
         return {
-            "eq": eq_bands, "compressor": comp, "esser": esser,
-            "saturator": sat, "limiter": lim, "transient": trans, "gain": g,
+            "eq": eq_bands, "gain": g,
         }
 
 
@@ -785,7 +648,7 @@ def _smoke_test():
     print(f"  [PASS] encode/decode roundtrip")
 
     plugin_dicts = ActionUnnormalizer.decode_to_plugin_dicts(out)
-    assert set(plugin_dicts.keys()) == {"eq", "compressor", "esser", "saturator", "limiter", "transient", "gain"}
+    assert set(plugin_dicts.keys()) == {"eq", "gain"}
     print(f"  [PASS] decode_to_plugin_dicts")
 
     actor = UrsulaSACActor().to(device)
@@ -820,7 +683,7 @@ print(f"  Wrote {export_path}")
 elapsed = time.time() - t_total
 print(f"\n{'=' * 60}")
 print(f"  PHASE 4 COMPLETE — {elapsed:.1f}s")
-print(f"  Architecture: LayerNorm → 512 → 512(+residual) → 256 → 7 heads")
+print(f"  Architecture: LayerNorm → 512 → 512(+residual) → 256 → 2 heads")
 print(f"  Policy: {policy_params:,} params")
 print(f"  Actor:  {actor_params:,} params")
 print(f"  Critic: {critic_params:,} params")

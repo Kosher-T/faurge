@@ -3,7 +3,7 @@
 #
 # Trains Ursula's DSP policy via Soft Actor-Critic (SAC) on the Gymnasium
 # environment built in Phase 5. The agent learns to map degraded/reference
-# metric pairs → 227D plugin parameters that restore the audio toward the
+# metric pairs → 188D plugin parameters that restore the audio toward the
 # reference identity.
 #
 # **Inputs:** `ursula_metrics/` (metric tensors) + `ursula_raw_pairs/` (audio)
@@ -36,21 +36,11 @@ except ImportError:
 PLUGIN_BASE = Path('/kaggle/usr/lib/notebooks/itorousa')
 sys.path.insert(0, str(PLUGIN_BASE))
 
-import compressor
 import equalizer
-import esser
-import limiter
-import saturator
-import transient
 import gain1
 
 PLUGIN_MODULES = {
     'eq': equalizer,
-    'compressor': compressor,
-    'esser': esser,
-    'saturator': saturator,
-    'limiter': limiter,
-    'transient': transient,
     'gain': gain1,
 }
 
@@ -64,7 +54,7 @@ SR = 48000
 CLIP_SEC = 3.0
 CLIP_SAMPLES = int(SR * CLIP_SEC)
 INPUT_DIM = 143       # 67 + 67 + 9
-OUTPUT_DIM = 227      # all plugin params flattened
+OUTPUT_DIM = 188      # EQ 186D + Gain 2D
 N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1

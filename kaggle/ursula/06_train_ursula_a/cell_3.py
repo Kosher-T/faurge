@@ -2,7 +2,7 @@
 # ## Supervised Training
 #
 # Train the policy network to predict inverse degradation parameters
-# from metric pairs. MSE regression on the 227D action vector.
+# from metric pairs. MSE regression on the 188D action vector.
 # With thousands of meaningful targets (vs 3 from random search),
 # the model learns physically grounded restoration parameters.
 
@@ -43,7 +43,7 @@ print(f"\nAugmented dataset: {len(dataset)} samples ({N_COPIES} copies × {len(s
 print(f"Batches per epoch: {len(loader)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Train policy (MSE regression on 227D output)
+# Train policy (MSE regression on 188D output)
 # ══════════════════════════════════════════════════════════════════════════════
 
 policy = UrsulaPolicy().to(DEVICE)
@@ -90,8 +90,7 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
             pred_np = pred_all.cpu().numpy()
             tgt_np = targets.cpu().numpy()
             eq_mse = np.mean((pred_np[:, :186] - tgt_np[:, :186]) ** 2)
-            comp_mse = np.mean((pred_np[:, 186:200] - tgt_np[:, 186:200]) ** 2)
-            rest_mse = np.mean((pred_np[:, 200:] - tgt_np[:, 200:]) ** 2)
+            gain_mse = np.mean((pred_np[:, 186:] - tgt_np[:, 186:]) ** 2)
         policy.train()
 
         if eval_mse < best_eval_mse:
@@ -100,7 +99,7 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
         elapsed = time.time() - t_start
         lr = scheduler.get_last_lr()[0]
         print(f"  epoch {epoch:>4}/{SUPERVISED_EPOCHS} | loss {avg_loss:.6f} | eval_mse {eval_mse:.6f} "
-              f"(best {best_eval_mse:.6f}) | EQ {eq_mse:.6f} Comp {comp_mse:.6f} Rest {rest_mse:.6f} "
+              f"(best {best_eval_mse:.6f}) | EQ {eq_mse:.6f} Gain {gain_mse:.6f} "
               f"| lr {lr:.6f} | {elapsed:.0f}s")
 
 print(f"\n  Training complete — {time.time() - t_start:.0f}s")

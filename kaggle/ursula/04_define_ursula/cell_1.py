@@ -3,7 +3,7 @@
 #
 # Defines and validates Ursula's policy network for DSP parameter prediction.
 # Input: 143D (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
-# Output: 227D (7 DSP plugins, tanh-activated, scaled to real ranges)
+# Output: 188D (EQ 186D + Gain 2D, tanh-activated, scaled to real ranges)
 #
 # **Inputs:** Metric tensors from Phase 3 (ursula_metrics/)
 # **Outputs:** `agents/ursula.py` — UrsulaPolicy, UrsulaSACActor, UrsulaSACCritic
@@ -21,7 +21,7 @@ import torch.nn.functional as F
 # ── Constants ─────────────────────────────────────────────────────────────────
 SR = 48000
 INPUT_DIM = 143       # 67 + 67 + 9
-OUTPUT_DIM = 227      # all plugin params flattened
+OUTPUT_DIM = 188      # EQ 186D + Gain 2D
 N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1  # +1 for "unknown"
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1

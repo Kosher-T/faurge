@@ -297,70 +297,6 @@ def randomEqBands():
     return bands
 
 
-def randomCompressorParams():
-    return {
-        'threshold_db': round(random.uniform(-60, 0), 2),
-        'ratio': round(random.uniform(1, 20), 2),
-        'attack_ms': round(random.uniform(0.1, 100), 2),
-        'release_ms': round(random.uniform(10, 1000), 2),
-        'knee_db': round(random.uniform(0, 12), 2),
-        'lookahead_ms': round(random.uniform(0, 10), 2),
-        'hold_ms': round(random.uniform(0, 200), 2),
-        'wet_dry_mix': round(random.uniform(0, 1), 2),
-        'stereo_link': 0.0,
-        'sidechain_hp_hz': round(random.uniform(20, 500), 1),
-        'sidechain_lp_hz': round(random.uniform(500, 20000), 1),
-        'saturate_drive_db': round(random.uniform(0, 12), 2),
-        'output_trim_db': round(random.uniform(-12, 12), 2),
-        'detector_type': random.choice([0, 1, 2, 3]),
-    }
-
-
-def randomEsserParams():
-    return {
-        'center_freq_hz': round(random.uniform(4000, 10000), 1),
-        'threshold_db': round(random.uniform(-60, 0), 2),
-        'ratio': round(random.uniform(0.25, 20), 2),
-        'bandwidth_hz': round(random.uniform(500, 4000), 1),
-        'attack_ms': round(random.uniform(0.1, 50), 2),
-        'release_ms': round(random.uniform(10, 500), 2),
-    }
-
-
-def randomSaturatorParams():
-    return {
-        'drive_db': round(random.uniform(0, 24), 2),
-        'mix': round(random.uniform(0, 1), 2),
-        'sat_type': random.choice(['tube', 'tape', 'diode', 'asymmetric']),
-        'hpf_hz': round(random.uniform(20, 500), 1),
-        'lpf_hz': round(random.uniform(2000, 20000), 1),
-        'oversampling': random.choice([1, 2, 4]),
-        'output_trim_db': round(random.uniform(-12, 12), 2),
-    }
-
-
-def randomLimiterParams():
-    return {
-        'ceiling_db': round(random.uniform(-12, 0), 2),
-        'release_ms': round(random.uniform(1, 500), 2),
-        'lookahead_ms': round(random.uniform(0, 10), 2),
-        'clip_mode': random.choice(['soft', 'hard']),
-        'stereo_link': 0.0,
-        'oversampling': random.choice([1, 2, 4]),
-    }
-
-
-def randomTransientParams():
-    return {
-        'attack_gain_db': round(random.uniform(-24, 24), 2),
-        'sustain_gain_db': round(random.uniform(-24, 24), 2),
-        'attack_time_ms': round(random.uniform(0.1, 50), 2),
-        'release_time_ms': round(random.uniform(10, 500), 2),
-        'sensitivity_db': round(random.uniform(-30, 0), 2),
-        'mix': round(random.uniform(0, 1), 2),
-    }
-
-
 def randomGainParams():
     return {
         'gain_db': round(random.uniform(-12, 12), 2),
@@ -371,11 +307,6 @@ def randomGainParams():
 def generateDegradationParams():
     return {
         'eq_bands': randomEqBands(),
-        'compressor': randomCompressorParams(),
-        'esser': randomEsserParams(),
-        'saturator': randomSaturatorParams(),
-        'limiter': randomLimiterParams(),
-        'transient': randomTransientParams(),
         'gain': randomGainParams(),
     }
 
@@ -388,11 +319,6 @@ def applyDegradation(audio, sr, params):
     audio = audio.astype(np.float32)
 
     audio, _ = equalizer.process(audio, sr, bands=params['eq_bands'])
-    audio, _ = compressor.process(audio, sr, **params['compressor'])
-    audio, _ = esser.process(audio, sr, **params['esser'])
-    audio, _ = saturator.process(audio, sr, **params['saturator'])
-    audio, _ = limiter.process(audio, sr, **params['limiter'])
-    audio, _ = transient.process(audio, sr, **params['transient'])
     audio, _ = gain1.process(audio, sr, **params['gain'])
 
     return audio

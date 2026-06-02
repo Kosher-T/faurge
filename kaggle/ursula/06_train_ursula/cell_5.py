@@ -93,7 +93,7 @@ policy_config = {
     "metric_dim": METRIC_DIM,
     "sr": SR,
     "clip_sec": CLIP_SEC,
-    "plugin_order": ["eq", "compressor", "esser", "saturator", "limiter", "transient", "gain"],
+    "plugin_order": ["eq", "gain"],
     "plugin_dims": {name: dim for name, dim in PLUGIN_HEAD_DIMS.items()},
     "param_ranges": {
         pr.name: {"low": pr.low, "high": pr.high, "log": pr.log}

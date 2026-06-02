@@ -3,7 +3,7 @@
 #
 # Before RL, pretrain the policy network on degraded→reference pairs.
 # For each pair, compute the approximate inverse of the degradation
-# parameters (negate EQ gains, disable non-linear effects), then train
+# parameters (negate EQ gains), then train
 # the policy to predict those inverse actions from metrics.
 #
 # This gives the RL agent a strong starting point — it begins with
@@ -33,17 +33,11 @@ except ImportError:
 PLUGIN_BASE = Path('/kaggle/usr/lib/notebooks/itorousa')
 sys.path.insert(0, str(PLUGIN_BASE))
 
-import compressor
 import equalizer
-import esser
-import limiter
-import saturator
-import transient
 import gain1
 
 PLUGIN_MODULES = {
-    'eq': equalizer, 'compressor': compressor, 'esser': esser,
-    'saturator': saturator, 'limiter': limiter, 'transient': transient, 'gain': gain1,
+    'eq': equalizer, 'gain': gain1,
 }
 print("Loaded plugins:", list(PLUGIN_MODULES.keys()))
 
@@ -52,7 +46,7 @@ SR = 48000
 CLIP_SEC = 5.0
 CLIP_SAMPLES = int(SR * CLIP_SEC)
 INPUT_DIM = 143
-OUTPUT_DIM = 227
+OUTPUT_DIM = 188
 N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1
 METRIC_DIM = 67

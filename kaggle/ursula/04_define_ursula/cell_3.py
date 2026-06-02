@@ -15,14 +15,14 @@ class UrsulaPolicy(nn.Module):
     Ursula's feed-forward policy network with per-plugin output heads.
 
     Input:  (batch, 143) — [M_degraded(67), M_reference(67), cluster_onehot(9)]
-    Output: (batch, 227) — tanh-activated raw action in [-1, 1]
+    Output: (batch, 188) — tanh-activated raw action in [-1, 1]
 
     Trunk:
         LayerNorm(143) → Linear(143, 512) → ReLU → Dropout
         Linear(512, 512) → ReLU → Dropout + Residual Skip
         Linear(512, 256) → ReLU
 
-    Output heads: 7 independent Linear(256, plugin_dim) → Tanh
+    Output heads: 2 independent Linear(256, plugin_dim) → Tanh
     """
 
     def __init__(
@@ -64,12 +64,6 @@ class UrsulaPolicy(nn.Module):
         gain_head = self.plugin_heads["gain"]
         nn.init.zeros_(gain_head.weight)
         nn.init.zeros_(gain_head.bias)
-
-        # Compressor ratio: center around 1.0
-        comp_head = self.plugin_heads["compressor"]
-        with torch.no_grad():
-            target_raw = (1.0 * 2.0 / (20.0 - 1.0)) - 1.0
-            comp_head.bias[1] = math.atanh(max(min(target_raw, 0.99), -0.99))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.trunk_norm(x)
@@ -193,74 +187,6 @@ class ActionUnnormalizer:
                 "dynamic_depth": params[f"eq_band{b+1}_dynamic_depth"].item() if batch_size == 1 else params[f"eq_band{b+1}_dynamic_depth"],
             })
 
-        # Compressor
-        _DETECT_TYPES = ["RMS", "peak", "feed_forward", "feed_back"]
-        comp_det = params["comp_detector_type"]
-        comp = {
-            "threshold_db": params["comp_threshold"].item() if batch_size == 1 else params["comp_threshold"],
-            "ratio": params["comp_ratio"].item() if batch_size == 1 else params["comp_ratio"],
-            "attack_ms": params["comp_attack"].item() if batch_size == 1 else params["comp_attack"],
-            "release_ms": params["comp_release"].item() if batch_size == 1 else params["comp_release"],
-            "knee_db": params["comp_knee"].item() if batch_size == 1 else params["comp_knee"],
-            "lookahead_ms": params["comp_lookahead"].item() if batch_size == 1 else params["comp_lookahead"],
-            "hold_ms": params["comp_hold"].item() if batch_size == 1 else params["comp_hold"],
-            "wet_dry_mix": params["comp_wet_dry"].item() if batch_size == 1 else params["comp_wet_dry"],
-            "stereo_link": params["comp_stereo_link"].item() if batch_size == 1 else params["comp_stereo_link"],
-            "sidechain_hp_hz": params["comp_sidechain_hp"].item() if batch_size == 1 else params["comp_sidechain_hp"],
-            "sidechain_lp_hz": params["comp_sidechain_lp"].item() if batch_size == 1 else params["comp_sidechain_lp"],
-            "saturate_drive_db": params["comp_saturate_drive"].item() if batch_size == 1 else params["comp_saturate_drive"],
-            "output_trim_db": params["comp_output_trim"].item() if batch_size == 1 else params["comp_output_trim"],
-            "detector_type": _DETECT_TYPES[int(comp_det.round().clamp(0, 3).item())] if batch_size == 1 else _DETECT_TYPES,
-        }
-
-        # Esser
-        esser = {
-            "center_freq_hz": params["esser_center"].item() if batch_size == 1 else params["esser_center"],
-            "threshold_db": params["esser_threshold"].item() if batch_size == 1 else params["esser_threshold"],
-            "ratio": params["esser_ratio"].item() if batch_size == 1 else params["esser_ratio"],
-            "bandwidth_hz": params["esser_bandwidth"].item() if batch_size == 1 else params["esser_bandwidth"],
-            "attack_ms": params["esser_attack"].item() if batch_size == 1 else params["esser_attack"],
-            "release_ms": params["esser_release"].item() if batch_size == 1 else params["esser_release"],
-        }
-
-        # Saturator
-        _SAT_TYPES = ["tube", "tape", "diode", "asymmetric"]
-        _OS_TYPES = [1, 2, 4, 8]
-        sat_type = params["sat_type"]
-        sat_os = params["sat_oversampling"]
-        sat = {
-            "drive_db": params["sat_drive"].item() if batch_size == 1 else params["sat_drive"],
-            "mix": params["sat_mix"].item() if batch_size == 1 else params["sat_mix"],
-            "sat_type": _SAT_TYPES[int(sat_type.round().clamp(0, 3).item())] if batch_size == 1 else _SAT_TYPES,
-            "hpf_hz": params["sat_hpf"].item() if batch_size == 1 else params["sat_hpf"],
-            "lpf_hz": params["sat_lpf"].item() if batch_size == 1 else params["sat_lpf"],
-            "oversampling": _OS_TYPES[int(sat_os.round().clamp(0, 3).item())] if batch_size == 1 else _OS_TYPES,
-            "output_trim_db": params["sat_output_trim"].item() if batch_size == 1 else params["sat_output_trim"],
-        }
-
-        # Limiter
-        _CLIP_MODES = ["hard", "soft"]
-        lim_clip = params["lim_clip_mode"]
-        lim_os = params["lim_oversampling"]
-        lim = {
-            "ceiling_db": params["lim_ceiling"].item() if batch_size == 1 else params["lim_ceiling"],
-            "release_ms": params["lim_release"].item() if batch_size == 1 else params["lim_release"],
-            "lookahead_ms": params["lim_lookahead"].item() if batch_size == 1 else params["lim_lookahead"],
-            "clip_mode": _CLIP_MODES[int(lim_clip.round().clamp(0, 1).item())] if batch_size == 1 else _CLIP_MODES,
-            "stereo_link": params["lim_stereo_link"].item() if batch_size == 1 else params["lim_stereo_link"],
-            "oversampling": _OS_TYPES[int(lim_os.round().clamp(0, 3).item())] if batch_size == 1 else _OS_TYPES,
-        }
-
-        # Transient
-        trans = {
-            "attack_gain_db": params["trans_attack_gain"].item() if batch_size == 1 else params["trans_attack_gain"],
-            "sustain_gain_db": params["trans_sustain_gain"].item() if batch_size == 1 else params["trans_sustain_gain"],
-            "attack_time_ms": params["trans_attack_time"].item() if batch_size == 1 else params["trans_attack_time"],
-            "release_time_ms": params["trans_release_time"].item() if batch_size == 1 else params["trans_release_time"],
-            "sensitivity_db": params["trans_sensitivity"].item() if batch_size == 1 else params["trans_sensitivity"],
-            "mix": params["trans_mix"].item() if batch_size == 1 else params["trans_mix"],
-        }
-
         # Gain
         g = {
             "gain_db": params["gain_db"].item() if batch_size == 1 else params["gain_db"],
@@ -268,8 +194,7 @@ class ActionUnnormalizer:
         }
 
         return {
-            "eq": eq_bands, "compressor": comp, "esser": esser,
-            "saturator": sat, "limiter": lim, "transient": trans, "gain": g,
+            "eq": eq_bands, "gain": g,
         }
 
 
