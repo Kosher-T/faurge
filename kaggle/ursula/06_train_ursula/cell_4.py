@@ -54,7 +54,7 @@ else:
 # ── Phase 6A Warm-Start: load pretrained policy weights ──
 PRETRAINED_PATH = OUTPUT / "ursula_pretrained.pt"
 if not PRETRAINED_PATH.exists():
-    ALT_PATH = Path('/kaggle/input/models/itorousa/ursula_pretrained/pytorch/default/1/ursula_pretrained.pt')
+    ALT_PATH = Path('/kaggle/input/models/itorousa/ursula/pytorch/supervised/2/ursula_pretrained(1).pt')
     if ALT_PATH.exists():
         PRETRAINED_PATH = ALT_PATH
 
@@ -105,11 +105,11 @@ print(f"  Per-band |diff| top 5: {np.sort(np.abs(m_degraded - m_ref))[-5:]}")
 # ── Reward function sanity check ──
 _floor = info['identity_floor']
 _init = info['initial_mse']
-print(f"\n  Reward function check (fixed scale: 1→+1, 200→~0, 12000→-1):")
-for _test_mse in [1, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 12000, 15000, _init]:
+print(f"\n  Reward function check (fixed scale: 1→+1, 200→~0, 22000→-1):")
+for _test_mse in [1, 10, 50, 100, 200, 500, 1000, 5000, 10000, 12000, 15000, 23000, _init]:
     _r = compute_reward(_test_mse, _floor, _init)
     print(f"    mse={_test_mse:>10.2f} → reward={_r:+.4f}")
-print(f"\n  Expected: 1→+1.0, 200→~0.0, 12000→-1.0, {_init:.0f}→{compute_reward(_init, _floor, _init):+.4f}")
+print(f"\n  Expected: 1→+1.0, 200→~0.0, 22000→-1.0, {_init:.0f}→{compute_reward(_init, _floor, _init):+.4f}")
 print(f"{'='*60}\n")
 
 for step in range(start_step + 1, TOTAL_STEPS + 1):
