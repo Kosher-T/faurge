@@ -116,6 +116,7 @@ ALPHA_MIN = 0.2         # strong floor for entropy coefficient (prevents entropy
 WARMUP_STEPS = 50_000   # large warmup to fill buffer with diverse experience
 MAX_EPISODE_STEPS = 1   # single-step: one shot to fix the audio
 POLICY_DELAY = 2        # update actor every N critic steps
+REWARD_MSE_MAX = 15000.0  # MSE ceiling mapped to -1 reward (narrow as she improves)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Curriculum Stages

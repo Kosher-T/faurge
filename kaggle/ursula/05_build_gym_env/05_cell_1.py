@@ -28,6 +28,7 @@ N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1  # +1 for "unknown"
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1
 MAX_STEPS = 50        # max steps per episode
+REWARD_MSE_MAX = 15000.0  # MSE ceiling mapped to -1 reward (narrow as she improves)
 
 # ── Paths (Kaggle) ────────────────────────────────────────────────────────────
 INPUT = Path('/kaggle/input')

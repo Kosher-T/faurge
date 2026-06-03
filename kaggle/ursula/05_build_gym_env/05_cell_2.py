@@ -249,11 +249,14 @@ def extract_metrics_67d(audio: np.ndarray) -> np.ndarray:
     return np.concatenate([ltas, lufs, crest, zcr]).astype(np.float32)
 
 
-def soft_clamp(x: float, k: float = 10.0) -> float:
-    """Smooth clamp: approaches -1 for large positive x, 0 for x<=0."""
-    if x <= 0:
-        return 0.0
-    return -np.tanh(k * x)
+def compute_reward(mse, floor, initial_mse):
+    """Reward based on absolute MSE on a fixed linear scale.
+
+        mse == 1                → +1.0  (near-perfect restoration)
+        mse == REWARD_MSE_MAX   → -1.0  (very wrong)
+    """
+    reward = 1.0 - (mse - 1.0) * 2.0 / (REWARD_MSE_MAX - 1.0)
+    return float(np.clip(reward, -1.0, 1.0))
 
 
-print("Functions defined: decode_action, apply_plugins, extract_metrics_67d, soft_clamp")
+print("Functions defined: decode_action, apply_plugins, extract_metrics_67d, compute_reward")

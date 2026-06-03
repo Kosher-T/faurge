@@ -90,11 +90,10 @@ def extract_metrics_67d(audio):
 def compute_reward(mse, floor, initial_mse):
     """Reward based on absolute MSE on a fixed linear scale.
 
-        mse == 1       → +1.0  (near-perfect restoration)
-        mse == 12000   → -1.0  (very wrong)
-        mse == 200     → ~+0.97 (close to zero, approximate)
+        mse == 1                → +1.0  (near-perfect restoration)
+        mse == REWARD_MSE_MAX   → -1.0  (very wrong)
     """
-    reward = 1.0 - (mse - 1.0) * 2.0 / 11999.0
+    reward = 1.0 - (mse - 1.0) * 2.0 / (REWARD_MSE_MAX - 1.0)
     return float(np.clip(reward, -1.0, 1.0))
 
 
@@ -261,6 +260,7 @@ class UrsulaDSPEnv(gym.Env):
         except Exception as e:
             obs = np.concatenate([self._current_metrics, self._reference_metrics, self._cluster_onehot]).astype(np.float32)
             return obs, -1.0, False, False, {"error": str(e)}
+        processed = np.clip(processed, -100.0, 100.0)
         try:
             m_result = extract_metrics_67d(processed)
         except Exception as e:

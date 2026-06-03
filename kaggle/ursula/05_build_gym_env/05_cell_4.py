@@ -54,7 +54,7 @@ for step in range(5):
     obs, reward, terminated, truncated, step_info = env.step(action)
     total_reward += reward
     mse_history.append(step_info.get("mse", float('nan')))
-    print(f"  step {step+1}: reward={reward:.4f}, mse={step_info.get('mse', 'N/A'):.4f}")
+    print(f"  step {step+1}: reward={reward:.8f}, mse={step_info.get('mse', 'N/A'):.4f}")
     if terminated or truncated:
         break
 
@@ -63,7 +63,7 @@ assert not np.any(np.isnan(obs)), "NaN in observation"
 assert not np.isinf(obs).any(), "Inf in observation"
 # Check reward is finite
 assert np.isfinite(total_reward), f"Non-finite total reward: {total_reward}"
-print(f"  [PASS] Random rollout OK — total_reward={total_reward:.4f}\n")
+print(f"  [PASS] Random rollout OK — total_reward={total_reward:.8f}\n")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Test 4: Multiple resets produce different pairs
@@ -132,7 +132,7 @@ for step in range(MAX_STEPS):
     if terminated or truncated:
         break
 
-print(f"  Completed {step+1} steps, total_reward={total_reward:.4f}")
+print(f"  Completed {step+1} steps, total_reward={total_reward:.8f}")
 print(f"  Final MSE: {step_info.get('mse', 'N/A')}")
 print(f"  [PASS] Full episode OK\n")
 

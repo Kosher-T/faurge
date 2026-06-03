@@ -32,7 +32,6 @@ class UrsulaDSPEnv(gym.Env):
         metrics_data: Path = None,
         cluster_data: Path = None,
         max_steps: int = MAX_STEPS,
-        soft_clamp_k: float = 10.0,
         mode: str = "train",  # "train" or "eval"
         max_pairs: int = None,  # curriculum: limit number of pairs
     ):
@@ -42,7 +41,6 @@ class UrsulaDSPEnv(gym.Env):
         self.metrics_data = metrics_data or METRICS_DATA
         self.cluster_data = cluster_data or CLUSTER_DATA
         self.max_steps = max_steps
-        self.soft_clamp_k = soft_clamp_k
         self.mode = mode
 
         # ── Load metadata ──
@@ -226,6 +224,9 @@ class UrsulaDSPEnv(gym.Env):
             ]).astype(np.float32)
             return obs, -1.0, False, False, {"error": str(e)}
 
+        # Clip to prevent numerical overflow in metric extraction
+        processed_audio = np.clip(processed_audio, -100.0, 100.0)
+
         # Compute metrics of processed audio
         try:
             m_result = extract_metrics_67d(processed_audio)
@@ -241,9 +242,9 @@ class UrsulaDSPEnv(gym.Env):
         # Compute MSE
         mse = float(np.mean((m_result - self._reference_metrics) ** 2))
 
-        # Reward: -soft_clamp(MSE - identity_floor, k)
+        # Reward: linear scale from REWARD_MSE_MAX
         floor = self._get_floor_for_cluster(self._cluster_id)
-        reward = soft_clamp(mse - floor, k=self.soft_clamp_k)
+        reward = compute_reward(mse, floor, self._current_mse)
 
         # Update state
         self._current_audio = processed_audio

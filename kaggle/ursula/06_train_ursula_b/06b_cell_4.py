@@ -105,11 +105,11 @@ print(f"  Per-band |diff| top 5: {np.sort(np.abs(m_degraded - m_ref))[-5:]}")
 # ── Reward function sanity check ──
 _floor = info['identity_floor']
 _init = info['initial_mse']
-print(f"\n  Reward function check (fixed scale: 1→+1, 200→~0, 22000→-1):")
-for _test_mse in [1, 10, 50, 100, 200, 500, 1000, 5000, 10000, 12000, 15000, 23000, _init]:
+print(f"\n  Reward function check (fixed scale: 1→+1, 7500→~0, 15000→-1):")
+for _test_mse in [1, 10, 50, 100, 200, 500, 1000, 5000, 7500, 10000, 12000, 15000, _init]:
     _r = compute_reward(_test_mse, _floor, _init)
-    print(f"    mse={_test_mse:>10.2f} → reward={_r:+.4f}")
-print(f"\n  Expected: 1→+1.0, 200→~0.0, 22000→-1.0, {_init:.0f}→{compute_reward(_init, _floor, _init):+.4f}")
+    print(f"    mse={_test_mse:>10.2f} → reward={_r:+.8f}")
+print(f"\n  Expected: 1→+1.0, 7500→~0.0, 15000→-1.0, {_init:.0f}→{compute_reward(_init, _floor, _init):+.8f}")
 print(f"{'='*60}\n")
 
 for step in range(start_step + 1, TOTAL_STEPS + 1):
@@ -178,7 +178,7 @@ for step in range(start_step + 1, TOTAL_STEPS + 1):
             elapsed = time.time() - t_train_start
             mse_arr = TRAIN_LOG["mse_values"][-100:]
             avg_mse = np.nanmean(mse_arr) if mse_arr else float('nan')
-            print(f"  step {step:>7,} | reward {reward:.4f} | mse {mse:.4f} "
+            print(f"  step {step:>7,} | reward {reward:.8f} | mse {mse:.4f} "
                   f"(avg {avg_mse:.4f}) | alpha {metrics.get('alpha', 0):.4f} "
                   f"| sparsity {sparsity:.2%} | {elapsed:.0f}s")
 
@@ -227,7 +227,7 @@ for step in range(start_step + 1, TOTAL_STEPS + 1):
         below_2x = np.mean(eval_mses < 2 * eval_floors) * 100
         improvement = np.mean(eval_initial - eval_mses)
         pct_improved = np.mean(eval_mses < eval_initial) * 100
-        print(f"    Mean reward:    {eval_rewards.mean():.4f} ± {eval_rewards.std():.4f}")
+        print(f"    Mean reward:    {eval_rewards.mean():.8f} ± {eval_rewards.std():.8f}")
         print(f"    Mean MSE:       {eval_mses.mean():.2f} ± {eval_mses.std():.2f}")
         print(f"    Mean initial:   {eval_initial.mean():.2f}")
         print(f"    Avg improvement: {improvement:.2f} ({pct_improved:.1f}% pairs improved)")
