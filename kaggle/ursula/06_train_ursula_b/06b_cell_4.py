@@ -54,7 +54,7 @@ else:
 # ── Phase 6A Warm-Start: load pretrained policy weights ──
 PRETRAINED_PATH = OUTPUT / "ursula_pretrained.pt"
 if not PRETRAINED_PATH.exists():
-    ALT_PATH = Path('/kaggle/input/models/itorousa/ursula/pytorch/supervised/2/ursula_pretrained(1).pt')
+    ALT_PATH = Path('/kaggle/input/models/itorousa/ursula/pytorch/supervised/3/ursula_pretrained(2).pt')
     if ALT_PATH.exists():
         PRETRAINED_PATH = ALT_PATH
 
