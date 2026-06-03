@@ -15,7 +15,7 @@ class UrsulaPolicy(nn.Module):
     Ursula's feed-forward policy network with per-plugin output heads.
 
     Input:  (batch, 143) — [M_degraded(67), M_reference(67), cluster_onehot(9)]
-    Output: (batch, 188) — tanh-activated raw action in [-1, 1]
+    Output: (batch, 125) — tanh-activated raw action in [-1, 1]
 
     Trunk:
         LayerNorm(143) → Linear(143, 512) → ReLU → Dropout
@@ -60,7 +60,7 @@ class UrsulaPolicy(nn.Module):
         self._init_identity_bias()
 
     def _init_identity_bias(self):
-        """Initialize gain head bias so untrained output ≈ 0 dB gain, 0 balance."""
+        """Initialize gain head bias so untrained output ≈ 0 dB gain."""
         gain_head = self.plugin_heads["gain"]
         nn.init.zeros_(gain_head.weight)
         nn.init.zeros_(gain_head.bias)
@@ -174,23 +174,22 @@ class ActionUnnormalizer:
 
         # EQ bands
         eq_bands = []
-        _FTYPES = ["peak", "low_shelf", "high_shelf", "highpass", "lowpass", "bandpass", "notch"]
+        _FTYPES = ["peak", "low_shelf", "high_shelf"]
         for b in range(31):
             ftype_idx = params[f"eq_band{b+1}_filter_type"]
-            ftype = _FTYPES[int(ftype_idx.round().clamp(0, 6).item())] if batch_size == 1 else _FTYPES
+            ftype = _FTYPES[int(ftype_idx.round().clamp(0, 2).item())] if batch_size == 1 else _FTYPES
             eq_bands.append({
                 "freq_hz": params[f"eq_band{b+1}_freq"].item() if batch_size == 1 else params[f"eq_band{b+1}_freq"],
                 "gain_db": params[f"eq_band{b+1}_gain"].item() if batch_size == 1 else params[f"eq_band{b+1}_gain"],
                 "q": params[f"eq_band{b+1}_q"].item() if batch_size == 1 else params[f"eq_band{b+1}_q"],
                 "filter_type": ftype,
-                "stereo_skew_db": params[f"eq_band{b+1}_stereo_skew"].item() if batch_size == 1 else params[f"eq_band{b+1}_stereo_skew"],
-                "dynamic_depth": params[f"eq_band{b+1}_dynamic_depth"].item() if batch_size == 1 else params[f"eq_band{b+1}_dynamic_depth"],
+                "stereo_skew_db": 0.0,
+                "dynamic_depth": 0.0,
             })
 
         # Gain
         g = {
             "gain_db": params["gain_db"].item() if batch_size == 1 else params["gain_db"],
-            "stereo_balance": params["stereo_balance"].item() if batch_size == 1 else params["stereo_balance"],
         }
 
         return {

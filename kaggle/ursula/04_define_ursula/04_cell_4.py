@@ -2,7 +2,7 @@
 # ## Tests & Export
 #
 # Comprehensive validation suite:
-# 1. Shape test — random 143D → 188D in [-1, 1]
+# 1. Shape test — random 143D → 125D in [-1, 1]
 # 2. Range test — unnormalized params in their respective bounds
 # 3. Encode/decode roundtrip
 # 4. Identity test — M_degraded == M_reference → near-identity output
@@ -148,7 +148,7 @@ with torch.no_grad():
     extreme_out = policy_cpu(extreme_input)
 
 # Decode EQ gains (index 1 within each 6-param band → gain_db)
-eq_gains = torch.stack([extreme_out[0, b * 6 + 1] for b in range(31)])
+eq_gains = torch.stack([extreme_out[0, b * 4 + 1] for b in range(31)])
 eq_gains_db = (eq_gains + 1.0) * 0.5 * 48.0 - 24.0
 
 high_band_mean = eq_gains_db[20:].mean().item()
@@ -237,16 +237,16 @@ No Kaggle dependency — runs entirely locally.
 Architecture
 ------------
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
-Output: 188D  (tanh-activated, scaled to each plugin parameter\'s real range)
+Output: 125D  (tanh-activated, scaled to each plugin parameter\'s real range)
 
 Hidden:  LayerNorm(143) → Linear(143, 512) → ReLU → Dropout(0.1)
          Linear(512, 512) → ReLU → Dropout(0.1) + Residual(skip)
          Linear(512, 256) → ReLU
          Plugin Heads → 2 separate Linear layers → Tanh
 
-The 188D output maps to 2 DSP plugins in cascade order:
-  1. EQ         (31 bands × 6 params = 186D)
-  2. Gain       (2D)
+The 125D output maps to 2 DSP plugins in cascade order:
+  1. EQ         (31 bands × 4 params = 124D)
+  2. Gain       (1D)
 
 Usage
 -----
@@ -255,7 +255,7 @@ Usage
 
     policy = UrsulaPolicy()
     x = torch.randn(1, 143)
-    raw_out = policy(x)          # (1, 188) in [-1, 1]
+    raw_out = policy(x)          # (1, 125) in [-1, 1]
     params = ActionUnnormalizer.decode(raw_out)
 \"\"\"
 
@@ -273,7 +273,7 @@ import torch.nn.functional as F
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 INPUT_DIM = 143       # 67 + 67 + 9
-OUTPUT_DIM = 188      # EQ 186D + Gain 2D
+OUTPUT_DIM = 125      # EQ 124D + Gain 1D
 N_CLUSTERS = 8        # K voice clusters
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1  # +1 for "unknown"
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1
@@ -295,14 +295,11 @@ for _b in range(31):
         ParamRange(f"eq_band{_b+1}_freq",       20.0,     20_000.0, log=True),
         ParamRange(f"eq_band{_b+1}_gain",       -24.0,        24.0),
         ParamRange(f"eq_band{_b+1}_q",            0.1,         10.0),
-        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,          6.0),
-        ParamRange(f"eq_band{_b+1}_stereo_skew", -6.0,          6.0),
-        ParamRange(f"eq_band{_b+1}_dynamic_depth", 0.0,          1.0),
+        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,          2.0),
     ])
 
 GAIN_PARAM_RANGES = [
     ParamRange("gain_db",           -12.0,     12.0),
-    ParamRange("stereo_balance",     -1.0,      1.0),
 ]
 
 ALL_PARAM_RANGES: List[ParamRange] = (
@@ -320,7 +317,7 @@ PLUGIN_SLICES: Dict[str, Tuple[int, int]] = {}
 PLUGIN_HEAD_DIMS: Dict[str, int] = {}
 _offset = 0
 for _name, _count in [
-    ("eq", 31 * 6), ("gain", 2),
+    ("eq", 31 * 4), ("gain", 1),
 ]:
     PLUGIN_SLICES[_name] = (_offset, _offset + _count)
     PLUGIN_HEAD_DIMS[_name] = _count
@@ -334,7 +331,7 @@ PLUGIN_HEAD_ORDER: List[str] = [
 # ── Categorical parameter indices ─────────────────────────────────────────────
 
 CATEGORICAL_INDICES: Dict[str, List[int]] = {
-    "eq_filter_type": list(range(2, 186, 6)),
+    "eq_filter_type": list(range(3, 124, 4)),
 }
 
 
@@ -491,22 +488,21 @@ class ActionUnnormalizer:
         batch_size = raw.shape[0]
 
         eq_bands = []
-        _FTYPES = ["peak", "low_shelf", "high_shelf", "highpass", "lowpass", "bandpass", "notch"]
+        _FTYPES = ["peak", "low_shelf", "high_shelf"]
         for b in range(31):
             ftype_idx = params[f"eq_band{b+1}_filter_type"]
-            ftype = _FTYPES[int(ftype_idx.round().clamp(0, 6).item())] if batch_size == 1 else _FTYPES
+            ftype = _FTYPES[int(ftype_idx.round().clamp(0, 2).item())] if batch_size == 1 else _FTYPES
             eq_bands.append({
                 "freq_hz": params[f"eq_band{b+1}_freq"].item() if batch_size == 1 else params[f"eq_band{b+1}_freq"],
                 "gain_db": params[f"eq_band{b+1}_gain"].item() if batch_size == 1 else params[f"eq_band{b+1}_gain"],
                 "q": params[f"eq_band{b+1}_q"].item() if batch_size == 1 else params[f"eq_band{b+1}_q"],
                 "filter_type": ftype,
-                "stereo_skew_db": params[f"eq_band{b+1}_stereo_skew"].item() if batch_size == 1 else params[f"eq_band{b+1}_stereo_skew"],
-                "dynamic_depth": params[f"eq_band{b+1}_dynamic_depth"].item() if batch_size == 1 else params[f"eq_band{b+1}_dynamic_depth"],
+                "stereo_skew_db": 0.0,
+                "dynamic_depth": 0.0,
             })
 
         g = {
             "gain_db": params["gain_db"].item() if batch_size == 1 else params["gain_db"],
-            "stereo_balance": params["stereo_balance"].item() if batch_size == 1 else params["stereo_balance"],
         }
 
         return {

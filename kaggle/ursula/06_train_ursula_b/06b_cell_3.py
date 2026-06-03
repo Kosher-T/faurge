@@ -99,7 +99,7 @@ def compute_reward(mse, floor, initial_mse):
 
 
 def decode_action(action):
-    """Decode 188D action → per-plugin config dicts (EQ + Gain only)."""
+    """Decode 125D action → per-plugin config dicts (EQ + Gain only)."""
     from dataclasses import dataclass as _dc
 
     @_dc(frozen=True)
@@ -112,18 +112,16 @@ def decode_action(action):
             _PR(f"eq_band{_b+1}_freq", 20.0, 20000.0, log=True),
             _PR(f"eq_band{_b+1}_gain", -24.0, 24.0),
             _PR(f"eq_band{_b+1}_q", 0.1, 10.0),
-            _PR(f"eq_band{_b+1}_filter_type", 0.0, 6.0),
-            _PR(f"eq_band{_b+1}_stereo_skew", -6.0, 6.0),
-            _PR(f"eq_band{_b+1}_dynamic_depth", 0.0, 1.0),
+            _PR(f"eq_band{_b+1}_filter_type", 0.0, 2.0),
         ])
     _all = _eq + [
-        _PR("gain_db", -12.0, 12.0), _PR("stereo_balance", -1.0, 1.0),
+        _PR("gain_db", -12.0, 12.0),
     ]
     lows = np.array([p.low for p in _all], dtype=np.float32)
     highs = np.array([p.high for p in _all], dtype=np.float32)
     is_log = np.array([p.log for p in _all], dtype=bool)
 
-    _CAT = set(range(2, 186, 6))
+    _CAT = set(range(3, 124, 4))
 
     vals = np.zeros_like(action)
     cont = np.array([i not in _CAT and not is_log[i] for i in range(OUTPUT_DIM)])
@@ -135,16 +133,16 @@ def decode_action(action):
     vals[ca] = np.clip(np.round((action[ca] + 1.0) * 0.5 * (highs[ca] - lows[ca]) + lows[ca]), lows[ca], highs[ca])
 
     params = {p.name: vals[i] for i, p in enumerate(_all)}
-    _FT = ["peak", "low_shelf", "high_shelf", "highpass", "lowpass", "bandpass", "notch"]
+    _FT = ["peak", "low_shelf", "high_shelf"]
 
     eq = []
     for b in range(31):
-        fi = max(0, min(6, int(round(params[f"eq_band{b+1}_filter_type"]))))
+        fi = max(0, min(2, int(round(params[f"eq_band{b+1}_filter_type"]))))
         eq.append({"freq_hz": float(params[f"eq_band{b+1}_freq"]), "gain_db": float(params[f"eq_band{b+1}_gain"]),
                     "q": float(params[f"eq_band{b+1}_q"]), "filter_type": _FT[fi],
-                    "stereo_skew_db": float(params[f"eq_band{b+1}_stereo_skew"]),
-                    "dynamic_depth": float(params[f"eq_band{b+1}_dynamic_depth"])})
-    g = {"gain_db": float(params["gain_db"]), "stereo_balance": float(params["stereo_balance"])}
+                    "stereo_skew_db": 0.0,
+                    "dynamic_depth": 0.0})
+    g = {"gain_db": float(params["gain_db"])}
 
     return {"eq": eq, "gain": g}
 

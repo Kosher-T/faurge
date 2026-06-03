@@ -299,7 +299,6 @@ def randomEqBands():
 def randomGainParams():
     return {
         'gain_db': round(random.uniform(-12, 12), 2),
-        'stereo_balance': 0.0,
     }
 
 

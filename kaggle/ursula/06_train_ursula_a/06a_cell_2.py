@@ -90,17 +90,15 @@ for _b in range(31):
         _PR(f"eq_band{_b+1}_freq", 20.0, 20000.0, log=True),
         _PR(f"eq_band{_b+1}_gain", -24.0, 24.0),
         _PR(f"eq_band{_b+1}_q", 0.1, 10.0),
-        _PR(f"eq_band{_b+1}_filter_type", 0.0, 6.0),
-        _PR(f"eq_band{_b+1}_stereo_skew", -6.0, 6.0),
-        _PR(f"eq_band{_b+1}_dynamic_depth", 0.0, 1.0),
+        _PR(f"eq_band{_b+1}_filter_type", 0.0, 2.0),
     ])
 _ALL = _eq + [
-    _PR("gain_db", -12.0, 12.0), _PR("stereo_balance", -1.0, 1.0),
+    _PR("gain_db", -12.0, 12.0),
 ]
 _LOWS = np.array([p.low for p in _ALL], dtype=np.float32)
 _HIGHS = np.array([p.high for p in _ALL], dtype=np.float32)
 _IS_LOG = np.array([p.log for p in _ALL], dtype=bool)
-_CAT = set(range(2, 186, 6))
+_CAT = set(range(3, 124, 4))
 
 
 def decode_action(action):
@@ -113,15 +111,15 @@ def decode_action(action):
     ca = sorted(_CAT); ca_a = np.array(ca)
     vals[ca_a] = np.clip(np.round((action[ca_a] + 1.0) * 0.5 * (_HIGHS[ca_a] - _LOWS[ca_a]) + _LOWS[ca_a]), _LOWS[ca_a], _HIGHS[ca_a])
     params = {p.name: vals[i] for i, p in enumerate(_ALL)}
-    _FT = ["peak","low_shelf","high_shelf","highpass","lowpass","bandpass","notch"]
+    _FT = ["peak","low_shelf","high_shelf"]
     eq = []
     for b in range(31):
-        fi = max(0, min(6, int(round(params[f"eq_band{b+1}_filter_type"]))))
+        fi = max(0, min(2, int(round(params[f"eq_band{b+1}_filter_type"]))))
         eq.append({"freq_hz": float(params[f"eq_band{b+1}_freq"]), "gain_db": float(params[f"eq_band{b+1}_gain"]),
                     "q": float(params[f"eq_band{b+1}_q"]), "filter_type": _FT[fi],
-                    "stereo_skew_db": float(params[f"eq_band{b+1}_stereo_skew"]),
-                    "dynamic_depth": float(params[f"eq_band{b+1}_dynamic_depth"])})
-    g = {"gain_db": float(params["gain_db"]), "stereo_balance": float(params["stereo_balance"])}
+                    "stereo_skew_db": 0.0,
+                    "dynamic_depth": 0.0})
+    g = {"gain_db": float(params["gain_db"])}
     return {"eq": eq, "gain": g}
 
 
@@ -161,13 +159,12 @@ def compute_inverse_action(deg_params):
     """
     inv = np.zeros(OUTPUT_DIM, dtype=np.float32)
 
-    # ── EQ: 31 bands × 6 params = 186D ──
+    # ── EQ: 31 bands × 4 params = 124D ──
     # degradation uses 1-6 random bands; unused bands have gain=0 (identity)
     deg_bands = deg_params.get('eq_bands', [])
     for b in range(31):
-        idx = b * 6
-        _FT_MAP = {"peak": 0, "low_shelf": 1, "high_shelf": 2,
-                   "highpass": 3, "lowpass": 4, "bandpass": 5, "notch": 6}
+        idx = b * 4
+        _FT_MAP = {"peak": 0, "low_shelf": 1, "high_shelf": 2}
 
         if b < len(deg_bands):
             band = deg_bands[b]
@@ -175,28 +172,21 @@ def compute_inverse_action(deg_params):
             gain = band.get('gain_db', 0.0)
             q = band.get('q', 1.0)
             ft_str = band.get('filter_type', 'peak')
-            stereo_skew = band.get('stereo_skew_db', 0.0)
-            dyn_depth = band.get('dynamic_depth', 0.0)
             ft_val = _FT_MAP.get(ft_str, 0)
 
             inv[idx + 0] = _inv_log(freq, 20.0, 20000.0)
             inv[idx + 1] = _inv_linear(-gain, -24.0, 24.0)
             inv[idx + 2] = _inv_linear(q, 0.1, 10.0)
-            inv[idx + 3] = _inv_cat(ft_val, 0.0, 6.0)
-            inv[idx + 4] = _inv_linear(stereo_skew, -6.0, 6.0)
-            inv[idx + 5] = _inv_linear(dyn_depth, 0.0, 1.0)
+            inv[idx + 3] = _inv_cat(ft_val, 0.0, 2.0)
         else:
             inv[idx + 0] = _inv_log(1000.0, 20.0, 20000.0)
             inv[idx + 1] = _inv_linear(0.0, -24.0, 24.0)
             inv[idx + 2] = _inv_linear(1.0, 0.1, 10.0)
-            inv[idx + 3] = _inv_cat(0.0, 0.0, 6.0)
-            inv[idx + 4] = _inv_linear(0.0, -6.0, 6.0)
-            inv[idx + 5] = _inv_linear(0.0, 0.0, 1.0)
+            inv[idx + 3] = _inv_cat(0.0, 0.0, 2.0)
 
-    # ── Gain: 2D (186-187) — negate ──
+    # ── Gain: 1D (124) — negate ──
     g = deg_params.get('gain', {})
-    inv[186] = _inv_linear(-g.get('gain_db', 0.0), -12.0, 12.0)   # negate
-    inv[187] = _inv_linear(-g.get('stereo_balance', 0.0), -1.0, 1.0)  # negate
+    inv[124] = _inv_linear(-g.get('gain_db', 0.0), -12.0, 12.0)   # negate
 
     return np.clip(inv, -1.0, 1.0)
 
@@ -297,7 +287,7 @@ print(f"\n{'='*60}")
 print(f"  INVERSE DEGRADATION: computing targets for {len(pair_data)} pairs")
 print(f"{'='*60}")
 
-supervised_data = []  # (observation_143d, target_action_188d, mse)
+supervised_data = []  # (observation_143d, target_action_125d, mse)
 
 for pi, pd in enumerate(pair_data):
     # Build observation

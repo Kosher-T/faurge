@@ -3,7 +3,7 @@
 #
 # Creates the Gymnasium environment for training Ursula's DSP policy via SAC.
 # The environment loads degraded/reference audio pairs and their 67D metrics,
-# applies the 2-plugin cascade (EQ + Gain) from the policy's 188D action, and returns a
+# applies the 2-plugin cascade (EQ + Gain) from the policy's 125D action, and returns a
 # reward based on how close the processed metrics are to the reference.
 #
 # **Inputs:** `ursula_raw_pairs/` (audio) + `ursula_metrics/` (metric tensors)
@@ -23,7 +23,7 @@ SR = 48000
 CLIP_SEC = 5.0
 CLIP_SAMPLES = int(SR * CLIP_SEC)  # 240,000
 INPUT_DIM = 143       # 67 + 67 + 9
-OUTPUT_DIM = 188      # EQ 186D + Gain 2D
+OUTPUT_DIM = 125      # EQ 124D + Gain 1D
 N_CLUSTERS = 8
 N_CLUSTERS_ONEHOT = N_CLUSTERS + 1  # +1 for "unknown"
 METRIC_DIM = 67       # LTAS 64 + LUFS 1 + Crest 1 + ZCR 1

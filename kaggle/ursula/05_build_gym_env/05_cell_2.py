@@ -36,14 +36,11 @@ for _b in range(31):
         ParamRange(f"eq_band{_b+1}_freq",        20.0,   20_000.0, log=True),
         ParamRange(f"eq_band{_b+1}_gain",       -24.0,      24.0),
         ParamRange(f"eq_band{_b+1}_q",            0.1,       10.0),
-        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,        6.0),
-        ParamRange(f"eq_band{_b+1}_stereo_skew", -6.0,        6.0),
-        ParamRange(f"eq_band{_b+1}_dynamic_depth", 0.0,        1.0),
+        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,        2.0),
     ])
 
 GAIN_PARAM_RANGES = [
     ParamRange("gain_db",           -12.0,     12.0),
-    ParamRange("stereo_balance",     -1.0,      1.0),
 ]
 
 ALL_PARAM_RANGES: List[ParamRange] = (
@@ -57,7 +54,7 @@ PARAM_IS_LOG = np.array([pr.log for pr in ALL_PARAM_RANGES], dtype=bool)
 
 # Categorical indices
 CATEGORICAL_INDICES: Dict[str, List[int]] = {
-    "eq_filter_type": list(range(2, 186, 6)),
+    "eq_filter_type": list(range(3, 124, 4)),
 }
 CAT_SET: set = set()
 for indices in CATEGORICAL_INDICES.values():
@@ -67,7 +64,7 @@ for indices in CATEGORICAL_INDICES.values():
 PLUGIN_SLICES: Dict[str, Tuple[int, int]] = {}
 _offset = 0
 for _name, _count in [
-    ("eq", 31 * 6), ("gain", 2),
+    ("eq", 31 * 4), ("gain", 1),
 ]:
     PLUGIN_SLICES[_name] = (_offset, _offset + _count)
     _offset += _count
@@ -77,10 +74,10 @@ print(f"Param ranges: {len(ALL_PARAM_RANGES)}, Plugin slices: {PLUGIN_SLICES}")
 
 def decode_action(action: np.ndarray) -> Dict[str, dict]:
     """
-    Decode a single 188D action in [-1,1] → per-plugin config dicts.
+    Decode a single 125D action in [-1,1] → per-plugin config dicts.
 
     Args:
-        action: (188,) array in [-1, 1]
+        action: (125,) array in [-1, 1]
     Returns:
         dict with keys: eq, gain
     """
@@ -108,26 +105,25 @@ def decode_action(action: np.ndarray) -> Dict[str, dict]:
     params = {pr.name: vals[i] for i, pr in enumerate(ALL_PARAM_RANGES)}
 
     # Build per-plugin config dicts
-    _FTYPES = ["peak", "low_shelf", "high_shelf", "highpass", "lowpass", "bandpass", "notch"]
+    _FTYPES = ["peak", "low_shelf", "high_shelf"]
 
     # EQ: 31 bands
     eq_bands = []
     for b in range(31):
         ftype_idx = int(round(params[f"eq_band{b+1}_filter_type"]))
-        ftype_idx = max(0, min(6, ftype_idx))
+        ftype_idx = max(0, min(2, ftype_idx))
         eq_bands.append({
             "freq_hz": float(params[f"eq_band{b+1}_freq"]),
             "gain_db": float(params[f"eq_band{b+1}_gain"]),
             "q": float(params[f"eq_band{b+1}_q"]),
             "filter_type": _FTYPES[ftype_idx],
-            "stereo_skew_db": float(params[f"eq_band{b+1}_stereo_skew"]),
-            "dynamic_depth": float(params[f"eq_band{b+1}_dynamic_depth"]),
+            "stereo_skew_db": 0.0,
+            "dynamic_depth": 0.0,
         })
 
     # Gain
     g = {
         "gain_db": float(params["gain_db"]),
-        "stereo_balance": float(params["stereo_balance"]),
     }
 
     return {

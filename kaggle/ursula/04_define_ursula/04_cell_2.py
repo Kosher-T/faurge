@@ -1,7 +1,7 @@
 # %% [markdown]
 # ## Parameter Specification & Utilities
 #
-# Defines all 188 DSP parameters (EQ 186D + Gain 2D), their ranges, and the ActionUnnormalizer
+# Defines all 125 DSP parameters (EQ 124D + Gain 1D), their ranges, and the ActionUnnormalizer
 # that converts tanh output to real plugin values.
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -16,25 +16,22 @@ class ParamRange:
     high: float
     log: bool = False
 
-# EQ: 31 bands × 6 params = 186D
+# EQ: 31 bands × 4 params = 124D
 EQ_PARAM_RANGES: List[ParamRange] = []
 for _b in range(31):
     EQ_PARAM_RANGES.extend([
         ParamRange(f"eq_band{_b+1}_freq",        20.0,   20_000.0, log=True),
         ParamRange(f"eq_band{_b+1}_gain",       -24.0,      24.0),
         ParamRange(f"eq_band{_b+1}_q",            0.1,       10.0),
-        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,        6.0),
-        ParamRange(f"eq_band{_b+1}_stereo_skew", -6.0,        6.0),
-        ParamRange(f"eq_band{_b+1}_dynamic_depth", 0.0,        1.0),
+        ParamRange(f"eq_band{_b+1}_filter_type",  0.0,        2.0),
     ])
 
-# Gain: 2D
+# Gain: 1D
 GAIN_PARAM_RANGES = [
     ParamRange("gain_db",           -12.0,     12.0),
-    ParamRange("stereo_balance",     -1.0,      1.0),
 ]
 
-# Master list: all 188D in order
+# Master list: all 125D in order
 ALL_PARAM_RANGES: List[ParamRange] = (
     EQ_PARAM_RANGES + GAIN_PARAM_RANGES
 )
@@ -48,7 +45,7 @@ PLUGIN_SLICES: Dict[str, Tuple[int, int]] = {}
 PLUGIN_HEAD_DIMS: Dict[str, int] = {}
 _offset = 0
 for _name, _count in [
-    ("eq", 31 * 6), ("gain", 2),
+    ("eq", 31 * 4), ("gain", 1),
 ]:
     PLUGIN_SLICES[_name] = (_offset, _offset + _count)
     PLUGIN_HEAD_DIMS[_name] = _count
@@ -63,7 +60,7 @@ PLUGIN_HEAD_ORDER: List[str] = [
 # ══════════════════════════════════════════════════════════════════════════════
 
 CATEGORICAL_INDICES: Dict[str, List[int]] = {
-    "eq_filter_type": list(range(2, 186, 6)),
+    "eq_filter_type": list(range(3, 124, 4)),
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

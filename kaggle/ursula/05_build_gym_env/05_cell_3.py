@@ -3,7 +3,7 @@
 #
 # The core RL environment for training Ursula's DSP policy.
 # Each episode: load a degraded clip, apply the 2-plugin cascade (EQ + Gain) from the
-# policy's 188D action, compute metrics, and return reward based on MSE
+# policy's 125D action, compute metrics, and return reward based on MSE
 # improvement toward the reference metrics.
 
 class UrsulaDSPEnv(gym.Env):
@@ -13,7 +13,7 @@ class UrsulaDSPEnv(gym.Env):
     Observation (143D):
         [M_current (67), M_reference (67), cluster_onehot (9)]
 
-    Action (188D):
+    Action (125D):
         Normalized params in [-1, 1] → decoded to real plugin ranges
 
     Reward:
@@ -207,7 +207,7 @@ class UrsulaDSPEnv(gym.Env):
         return obs, info
 
     def step(self, action):
-        """Apply action (188D) to current audio, return new observation + reward."""
+        """Apply action (125D) to current audio, return new observation + reward."""
         self._step_count += 1
 
         # Decode action → plugin config dicts

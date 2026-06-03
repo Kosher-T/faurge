@@ -2,7 +2,7 @@
 # ## Supervised Training
 #
 # Train the policy network to predict inverse degradation parameters
-# from metric pairs. MSE regression on the 188D action vector.
+# from metric pairs. MSE regression on the 125D action vector.
 # With thousands of meaningful targets (vs 3 from random search),
 # the model learns physically grounded restoration parameters.
 
@@ -43,7 +43,7 @@ print(f"\nAugmented dataset: {len(dataset)} samples ({N_COPIES} copies × {len(s
 print(f"Batches per epoch: {len(loader)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Train policy (MSE regression on 188D output)
+# Train policy (MSE regression on 125D output)
 # ══════════════════════════════════════════════════════════════════════════════
 
 policy = UrsulaPolicy().to(DEVICE)
@@ -89,8 +89,8 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
             eval_mse = F.mse_loss(pred_all, targets).item()
             pred_np = pred_all.cpu().numpy()
             tgt_np = targets.cpu().numpy()
-            eq_mse = np.mean((pred_np[:, :186] - tgt_np[:, :186]) ** 2)
-            gain_mse = np.mean((pred_np[:, 186:] - tgt_np[:, 186:]) ** 2)
+            eq_mse = np.mean((pred_np[:, :124] - tgt_np[:, :124]) ** 2)
+            gain_mse = np.mean((pred_np[:, 124:] - tgt_np[:, 124:]) ** 2)
         policy.train()
 
         if eval_mse < best_eval_mse:
