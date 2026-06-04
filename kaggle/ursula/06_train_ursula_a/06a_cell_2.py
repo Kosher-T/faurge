@@ -14,8 +14,14 @@
 # - Transient: negate gains or disable (mix=0)
 # - Gain: negate gain_db
 
+import os
+import sys
 import soundfile as sf
 import librosa
+
+if SUPERVISED_TARGET_PATH is not None and Path(SUPERVISED_TARGET_PATH).exists():
+    print(f"SUPERVISED_TARGET_PATH is provided ({SUPERVISED_TARGET_PATH}).")
+    print("Skipping generation of supervised targets in this cell.")
 
 # ── Metrics extraction (same as Phase 5/6) ──
 
@@ -202,25 +208,30 @@ with open(csv_path) as f:
         all_pairs.append(row)
 
 # Load degradation params
-deg_params_path = PAIRS_DATA / 'degradation_params.json'
-if not deg_params_path.exists():
-    # Fallback: try alternative locations
-    for alt in [PAIRS_DATA / 'degradation_params.json',
-                INPUT / 'notebooks/itorousa/02-generate-degraded-pairs/ursula_dataset/degradation_params.json']:
-        if alt.exists():
-            deg_params_path = alt
-            break
-
-if deg_params_path.exists():
-    with open(deg_params_path) as f:
+if DEGRADATION_PARAMS_PATH is not None and Path(DEGRADATION_PARAMS_PATH).exists():
+    with open(DEGRADATION_PARAMS_PATH) as f:
         all_deg_params = json.load(f)
-    print(f"Loaded degradation params for {len(all_deg_params)} pairs")
+    print(f"Loaded degradation params from {DEGRADATION_PARAMS_PATH}")
 else:
-    raise FileNotFoundError(
-        f"degradation_params.json not found. Checked:\n"
-        f"  {PAIRS_DATA / 'degradation_params.json'}\n"
-        f"  Searched: {deg_params_path}"
-    )
+    deg_params_path = PAIRS_DATA / 'degradation_params.json'
+    if not deg_params_path.exists():
+        # Fallback: try alternative locations
+        for alt in [PAIRS_DATA / 'degradation_params.json',
+                    INPUT / 'notebooks/itorousa/02-generate-degraded-pairs/ursula_dataset/degradation_params.json']:
+            if alt.exists():
+                deg_params_path = alt
+                break
+
+    if deg_params_path.exists():
+        with open(deg_params_path) as f:
+            all_deg_params = json.load(f)
+        print(f"Loaded degradation params for {len(all_deg_params)} pairs")
+    else:
+        raise FileNotFoundError(
+            f"degradation_params.json not found. Checked:\n"
+            f"  {PAIRS_DATA / 'degradation_params.json'}\n"
+            f"  Searched: {deg_params_path}"
+        )
 
 # Filter to pairs that have degradation params
 pairs_with_params = [p for p in all_pairs if p['pair_id'] in all_deg_params]
@@ -316,7 +327,7 @@ for pi, pd in enumerate(pair_data):
     supervised_data.append((obs, inv_action, mse))
     if pi < 10 or (pi + 1) % 50 == 0:
         print(f"  Pair {pi:>5}/{len(pair_data)}: inverse_mse={mse:.2f}, "
-              f"action_norm={np.linalg.norm(inv_action):.3f}")
+                f"action_norm={np.linalg.norm(inv_action):.3f}")
 
 # Summary
 print(f"\n{'='*60}")
@@ -330,6 +341,13 @@ print(f"  MSE median:      {np.median(mses):.2f}")
 n_finite = np.sum(np.isfinite(mses))
 print(f"  Valid pairs:     {n_finite}/{len(supervised_data)}")
 print(f"{'='*60}")
+
+# Save ordered degradation params to a JSON for easy loading later
+ordered_deg_params = {pd['pair_id']: pd['deg_params'] for pd in pair_data}
+ordered_deg_params_path = OUTPUT / 'ordered_degradation_params.json'
+with open(ordered_deg_params_path, 'w') as f:
+    json.dump(ordered_deg_params, f, indent=2)
+print(f"  Saved ordered degradation params to {ordered_deg_params_path}")
 
 # Save for next cell
 import pickle

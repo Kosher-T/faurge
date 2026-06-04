@@ -15,7 +15,14 @@ import pickle
 # Load targets and do 80/20 Train/Test Split
 # ══════════════════════════════════════════════════════════════════════════════
 
-with open(OUTPUT / 'supervised_targets.pkl', 'rb') as f:
+if SUPERVISED_TARGET_PATH is not None and Path(SUPERVISED_TARGET_PATH).exists():
+    targets_path = Path(SUPERVISED_TARGET_PATH)
+    print(f"Loading supervised targets from {targets_path}")
+else:
+    targets_path = OUTPUT / 'supervised_targets.pkl'
+    print(f"Loading supervised targets from {targets_path}")
+
+with open(targets_path, 'rb') as f:
     supervised_data = pickle.load(f)
 
 # Convert to numpy arrays first
@@ -65,6 +72,16 @@ print(f"Batches per epoch: {len(train_loader)}")
 # ══════════════════════════════════════════════════════════════════════════════
 
 policy = UrsulaPolicy().to(DEVICE)
+
+# Resume from latest model if provided
+if LATEST_MODEL_PATH is not None and Path(LATEST_MODEL_PATH).exists():
+    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+    if "policy_state_dict" in checkpoint:
+        policy.load_state_dict(checkpoint["policy_state_dict"])
+    else:
+        policy.load_state_dict(checkpoint)
+    print(f"Loaded policy weights from {LATEST_MODEL_PATH}")
+
 optimizer = torch.optim.Adam(policy.parameters(), lr=SUPERVISED_LR, weight_decay=WEIGHT_DECAY)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=SUPERVISED_EPOCHS)
 
@@ -81,6 +98,7 @@ print(f"  Early stop patience: {EARLY_STOP_PATIENCE}")
 print(f"{'='*60}\n")
 
 # ── Loss curve logging ──
+start_epoch = 1
 loss_history = {
     "epoch": [],
     "train_loss": [],
@@ -89,14 +107,28 @@ loss_history = {
     "test_gain_mse": [],
     "lr": [],
 }
+best_test_mse = float('inf')
+epochs_without_improvement = 0
+
+if MANIFEST_PATH is not None and Path(MANIFEST_PATH).exists():
+    with open(MANIFEST_PATH, 'r') as f:
+        manifest = json.load(f)
+    start_epoch = manifest.get('epoch', 0) + 1
+    loss_history = manifest.get('loss_history', loss_history)
+    best_test_mse = manifest.get('best_test_mse', float('inf'))
+    epochs_without_improvement = manifest.get('epochs_without_improvement', 0)
+    print(f"Resuming from manifest at epoch {start_epoch}, best MSE: {best_test_mse:.6f}")
+
+# Fast-forward scheduler if resuming
+if start_epoch > 1:
+    for _ in range(start_epoch - 1):
+        scheduler.step()
 
 policy.train()
 t_start = time.time()
-best_test_mse = float('inf')
 best_policy_state = None
-epochs_without_improvement = 0
 
-for epoch in range(1, SUPERVISED_EPOCHS + 1):
+for epoch in range(start_epoch, SUPERVISED_EPOCHS + 1):
     epoch_loss = 0.0
     n_batches = 0
 
@@ -145,9 +177,26 @@ for epoch in range(1, SUPERVISED_EPOCHS + 1):
             best_policy_state = {k: v.cpu().clone() for k, v in policy.state_dict().items()}
             is_new_best = "⭐ NEW BEST"
             epochs_without_improvement = 0
+            
+            # Save checkpoint
+            torch.save({
+                "policy_state_dict": policy.state_dict(),
+                "epoch": epoch,
+                "test_mse": test_mse,
+            }, OUTPUT / 'latest_model.pt')
         else:
             is_new_best = ""
             epochs_without_improvement += 10  # we only check every 10 epochs
+
+        # Save manifest
+        manifest = {
+            "epoch": epoch,
+            "best_test_mse": best_test_mse,
+            "epochs_without_improvement": epochs_without_improvement,
+            "loss_history": loss_history
+        }
+        with open(OUTPUT / 'manifest.json', 'w') as f:
+            json.dump(manifest, f, indent=2)
 
         elapsed = time.time() - t_start
         print(f"  epoch {epoch:>4}/{SUPERVISED_EPOCHS} | train_loss {avg_loss:.6f} | TEST_MSE {test_mse:.6f} "

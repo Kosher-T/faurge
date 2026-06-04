@@ -58,6 +58,12 @@ METRICS_DATA = INPUT / 'notebooks/itorousa/03-extract-metrics/ursula_metrics'
 CLUSTER_DATA = INPUT / 'notebooks/itorousa/01-cluster-speakers/ursula_cluster_data'
 OUTPUT = Path('/kaggle/working')
 
+# ── Resuming Variables ──
+MANIFEST_PATH = None
+SUPERVISED_TARGET_PATH = None
+DEGRADATION_PARAMS_PATH = None
+LATEST_MODEL_PATH = None
+
 AGENTS_SRC = INPUT / 'notebooks/itorousa/04-define-ursula/agents'
 AGENTS_DST = OUTPUT / 'agents'
 if AGENTS_SRC.exists():
