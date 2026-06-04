@@ -28,7 +28,7 @@ HOP_SIZE = 1024
 PAIRS_PER_BATCH = 500
 MAX_OUTPUT_GB = 18.0
 CHECKPOINT_INTERVAL = 100
-MAX_CLIPS = 500  # Curriculum: increase to 30, 100, then full dataset
+MAX_CLIPS = 14000  # Generate 14,000 pairs for massive supervised learning
 
 random.seed(42)
 np.random.seed(42)
