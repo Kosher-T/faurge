@@ -10,9 +10,9 @@ Architecture
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
 Output: 227D  (tanh-activated, scaled to each plugin parameter's real range)
 
-Hidden:  LayerNorm(143) → Linear(143, 512) → ReLU → Dropout(0.1)
-         Linear(512, 512) → ReLU → Dropout(0.1) + Residual(skip)
-         Linear(512, 256) → ReLU
+Hidden:  LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
+         Linear(256, 256) → ReLU → Dropout(0.2) + Residual(skip)
+         Linear(256, 128) → ReLU → Dropout(0.3)
          Plugin Heads → 7 separate Linear layers → Tanh
 
 The 227D output maps to 7 DSP plugins in cascade order:
@@ -232,18 +232,18 @@ class UrsulaPolicy(nn.Module):
     Output: (batch, 227) — tanh-activated raw action in [-1, 1]
 
     Trunk:
-        LayerNorm(143) → Linear(143, 512) → ReLU → Dropout
-        Linear(512, 512) → ReLU → Dropout + Residual Skip
-        Linear(512, 256) → ReLU
+        LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
+        Linear(256, 256) → ReLU → Dropout(0.2) + Residual Skip
+        Linear(256, 128) → ReLU → Dropout(0.3)
 
-    Output heads: 7 independent Linear(256, plugin_dim) → Tanh
+    Output heads: 7 independent Linear(128, plugin_dim) → Tanh
     """
 
     def __init__(
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         dropout: float = 0.1,
         n_clusters: int = N_CLUSTERS_ONEHOT,
     ):
@@ -251,21 +251,22 @@ class UrsulaPolicy(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        # Trunk
+        # Trunk — depth-dependent dropout to limit memorization
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout),          # 0.1
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout * 2),      # 0.2
         )
         self.trunk_block3 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),   # 256
+            nn.Linear(hidden_dim, hidden_dim // 2),   # 128
             nn.ReLU(),
+            nn.Dropout(dropout * 3),      # 0.3
         )
 
         # Per-plugin output heads
@@ -568,7 +569,7 @@ class UrsulaSACActor(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         dropout: float = 0.1,
         log_std_min: float = -20.0,
         log_std_max: float = 2.0,
@@ -577,21 +578,22 @@ class UrsulaSACActor(nn.Module):
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
 
-        # Shared trunk
+        # Shared trunk — depth-dependent dropout to limit memorization
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout),          # 0.1
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout * 2),      # 0.2
         )
         self.trunk_block3 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
+            nn.Dropout(dropout * 3),      # 0.3
         )
 
         # Per-plugin mu and log_std heads
@@ -662,7 +664,7 @@ class _QNetwork(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
     ):
         super().__init__()
         self.net = nn.Sequential(
@@ -694,7 +696,7 @@ class UrsulaSACCritic(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
     ):
         super().__init__()
         self.q1 = _QNetwork(state_dim, action_dim, hidden_dim)

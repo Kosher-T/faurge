@@ -68,7 +68,7 @@ class SACAgent:
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         actor_lr: float = ACTOR_LR,
         critic_lr: float = CRITIC_LR,
         alpha_lr: float = ALPHA_LR,

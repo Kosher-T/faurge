@@ -93,9 +93,9 @@ print(f"Device: {DEVICE}")
 MAX_PAIRS = None                # use ALL pairs with degradation_params
 SUPERVISED_EPOCHS = 500         # more epochs since we have good targets
 SUPERVISED_BATCH_SIZE = 64
-SUPERVISED_LR = 3e-4            # lower LR for cleaner convergence
+SUPERVISED_LR = 5e-5            # reduced LR to prevent overshooting with smaller model
 AUGMENTATION_NOISE = 0.01       # smaller noise since targets are meaningful
-WEIGHT_DECAY = 1e-5             # L2 regularization to prevent overfitting
+WEIGHT_DECAY = 1e-3             # strong L2 regularization to combat overfitting
 GRAD_CLIP_NORM = 1.0            # max gradient norm to prevent explosions
 EARLY_STOP_PATIENCE = 50        # stop if test MSE doesn't improve for N epochs
 

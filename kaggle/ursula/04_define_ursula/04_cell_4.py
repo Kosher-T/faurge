@@ -239,9 +239,9 @@ Architecture
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
 Output: 125D  (tanh-activated, scaled to each plugin parameter\'s real range)
 
-Hidden:  LayerNorm(143) → Linear(143, 512) → ReLU → Dropout(0.1)
-         Linear(512, 512) → ReLU → Dropout(0.1) + Residual(skip)
-         Linear(512, 256) → ReLU
+Hidden:  LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
+         Linear(256, 256) → ReLU → Dropout(0.2) + Residual(skip)
+         Linear(256, 128) → ReLU → Dropout(0.3)
          Plugin Heads → 2 separate Linear layers → Tanh
 
 The 125D output maps to 2 DSP plugins in cascade order:
@@ -356,7 +356,7 @@ class UrsulaPolicy(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         dropout: float = 0.1,
         n_clusters: int = N_CLUSTERS_ONEHOT,
     ):
@@ -364,20 +364,22 @@ class UrsulaPolicy(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
+        # Trunk — depth-dependent dropout to limit memorization
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout),          # 0.1
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout * 2),      # 0.2
         )
         self.trunk_block3 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
+            nn.Dropout(dropout * 3),      # 0.3
         )
 
         self.plugin_heads = nn.ModuleDict({
@@ -517,7 +519,7 @@ class UrsulaSACActor(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         dropout: float = 0.1,
         log_std_min: float = -20.0,
         log_std_max: float = 2.0,
@@ -526,20 +528,22 @@ class UrsulaSACActor(nn.Module):
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
 
+        # Shared trunk — depth-dependent dropout to limit memorization
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout),          # 0.1
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.Dropout(dropout * 2),      # 0.2
         )
         self.trunk_block3 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
+            nn.Dropout(dropout * 3),      # 0.3
         )
 
         self.mu_heads = nn.ModuleDict({
@@ -585,7 +589,7 @@ class UrsulaSACActor(nn.Module):
 # ── SAC Critic (Twin Q-Networks) ─────────────────────────────────────────────
 
 class _QNetwork(nn.Module):
-    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 512):
+    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 256):
         super().__init__()
         self.net = nn.Sequential(
             nn.LayerNorm(state_dim + action_dim),
@@ -603,7 +607,7 @@ class _QNetwork(nn.Module):
 
 
 class UrsulaSACCritic(nn.Module):
-    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 512):
+    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 256):
         super().__init__()
         self.q1 = _QNetwork(state_dim, action_dim, hidden_dim)
         self.q2 = _QNetwork(state_dim, action_dim, hidden_dim)
@@ -679,7 +683,7 @@ print(f"  Wrote {export_path}")
 elapsed = time.time() - t_total
 print(f"\n{'=' * 60}")
 print(f"  PHASE 4 COMPLETE — {elapsed:.1f}s")
-print(f"  Architecture: LayerNorm → 512 → 512(+residual) → 256 → 2 heads")
+print(f"  Architecture: LayerNorm → 256 → 256(+residual) → 128 → 2 heads")
 print(f"  Policy: {policy_params:,} params")
 print(f"  Actor:  {actor_params:,} params")
 print(f"  Critic: {critic_params:,} params")
