@@ -22,7 +22,7 @@ class UrsulaPolicy(nn.Module):
         Linear(944, 944) → ReLU → Dropout(0.2) + Residual Skip
         Linear(944, 472) → ReLU → Dropout(0.3)
 
-    Output heads: 2 independent Linear(128, plugin_dim) → Tanh
+    Output heads: 2 independent Linear(472, plugin_dim) → Tanh
     """
 
     def __init__(
