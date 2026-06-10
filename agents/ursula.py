@@ -10,9 +10,9 @@ Architecture
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
 Output: 227D  (tanh-activated, scaled to each plugin parameter's real range)
 
-Hidden:  LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
-         Linear(256, 256) → ReLU → Dropout(0.2) + Residual(skip)
-         Linear(256, 128) → ReLU → Dropout(0.3)
+Hidden:  LayerNorm(143) → Linear(143, 944) → ReLU → Dropout(0.1)
+         Linear(944, 944) → ReLU → Dropout(0.2) + Residual(skip)
+         Linear(944, 472) → ReLU → Dropout(0.3)
          Plugin Heads → 7 separate Linear layers → Tanh
 
 The 227D output maps to 7 DSP plugins in cascade order:
@@ -232,9 +232,9 @@ class UrsulaPolicy(nn.Module):
     Output: (batch, 227) — tanh-activated raw action in [-1, 1]
 
     Trunk:
-        LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
-        Linear(256, 256) → ReLU → Dropout(0.2) + Residual Skip
-        Linear(256, 128) → ReLU → Dropout(0.3)
+        LayerNorm(143) → Linear(143, 944) → ReLU → Dropout(0.1)
+        Linear(944, 944) → ReLU → Dropout(0.2) + Residual Skip
+        Linear(944, 472) → ReLU → Dropout(0.3)
 
     Output heads: 7 independent Linear(128, plugin_dim) → Tanh
     """
@@ -243,7 +243,7 @@ class UrsulaPolicy(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
         dropout: float = 0.1,
         n_clusters: int = N_CLUSTERS_ONEHOT,
     ):
@@ -569,7 +569,7 @@ class UrsulaSACActor(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
         dropout: float = 0.1,
         log_std_min: float = -20.0,
         log_std_max: float = 2.0,
@@ -664,7 +664,7 @@ class _QNetwork(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
     ):
         super().__init__()
         self.net = nn.Sequential(
@@ -696,7 +696,7 @@ class UrsulaSACCritic(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
     ):
         super().__init__()
         self.q1 = _QNetwork(state_dim, action_dim, hidden_dim)

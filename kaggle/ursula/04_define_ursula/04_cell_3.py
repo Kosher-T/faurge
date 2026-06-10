@@ -18,9 +18,9 @@ class UrsulaPolicy(nn.Module):
     Output: (batch, 125) — tanh-activated raw action in [-1, 1]
 
     Trunk:
-        LayerNorm(143) → Linear(143, 256) → ReLU → Dropout(0.1)
-        Linear(256, 256) → ReLU → Dropout(0.2) + Residual Skip
-        Linear(256, 128) → ReLU → Dropout(0.3)
+        LayerNorm(143) → Linear(143, 944) → ReLU → Dropout(0.1)
+        Linear(944, 944) → ReLU → Dropout(0.2) + Residual Skip
+        Linear(944, 472) → ReLU → Dropout(0.3)
 
     Output heads: 2 independent Linear(128, plugin_dim) → Tanh
     """
@@ -29,7 +29,7 @@ class UrsulaPolicy(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
         dropout: float = 0.1,
     ):
         super().__init__()
@@ -213,7 +213,7 @@ class UrsulaSACActor(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 256,
+        hidden_dim: int = 944,
         dropout: float = 0.1,
         log_std_min: float = -20.0,
         log_std_max: float = 2.0,
@@ -287,7 +287,7 @@ class UrsulaSACActor(nn.Module):
 class _QNetwork(nn.Module):
     """Single Q-network: (state, action) → Q-value."""
 
-    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 256):
+    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 944):
         super().__init__()
         self.net = nn.Sequential(
             nn.LayerNorm(state_dim + action_dim),
@@ -307,7 +307,7 @@ class _QNetwork(nn.Module):
 class UrsulaSACCritic(nn.Module):
     """Twin Q-networks for SAC (clipped double-Q)."""
 
-    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 256):
+    def __init__(self, state_dim: int = INPUT_DIM, action_dim: int = OUTPUT_DIM, hidden_dim: int = 944):
         super().__init__()
         self.q1 = _QNetwork(state_dim, action_dim, hidden_dim)
         self.q2 = _QNetwork(state_dim, action_dim, hidden_dim)

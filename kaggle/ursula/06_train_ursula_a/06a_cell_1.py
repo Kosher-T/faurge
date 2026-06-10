@@ -93,7 +93,7 @@ print(f"Device: {DEVICE}")
 MAX_PAIRS = None                # use ALL pairs with degradation_params
 SUPERVISED_EPOCHS = 500         # more epochs since we have good targets
 SUPERVISED_BATCH_SIZE = 64
-SUPERVISED_LR = 5e-5            # reduced LR to prevent overshooting with smaller model
+SUPERVISED_LR = 5e-4            # standard LR for 1.5M param model
 AUGMENTATION_NOISE = 0.01       # smaller noise since targets are meaningful
 WEIGHT_DECAY = 1e-3             # strong L2 regularization to combat overfitting
 GRAD_CLIP_NORM = 1.0            # max gradient norm to prevent explosions
