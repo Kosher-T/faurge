@@ -317,29 +317,33 @@ for pi, pd in enumerate(pair_data):
         plugin_dicts = decode_action(inv_action)
         processed = apply_plugins(pd['degraded_audio'], SR, plugin_dicts)
         m_result = extract_metrics_67d(processed)
-        dim_range = np.abs(m_result - pd['m_reference'])
-        dim_range = np.maximum(dim_range, 1e-6)
-        mse = float(np.mean(((m_result - pd['m_reference']) / dim_range) ** 2))
+
+        # Actual MSE: how close is the restored audio to reference?
+        restored_mse = float(np.mean((m_result - pd['m_reference']) ** 2))
+        # Baseline: how far was the degraded audio from reference?
+        initial_mse = float(np.mean((pd['m_degraded'] - pd['m_reference']) ** 2))
     except Exception as e:
         print(f"  [WARN] Pair {pi} ({pd['pair_id']}): inverse failed — {e}")
-        mse = float('inf')
+        restored_mse = float('inf')
+        initial_mse = float('inf')
 
-    supervised_data.append((obs, inv_action, mse))
+    supervised_data.append((obs, inv_action, restored_mse))
+    improved = "✅" if restored_mse < initial_mse else "❌"
     if pi < 10 or (pi + 1) % 50 == 0:
-        print(f"  Pair {pi:>5}/{len(pair_data)}: inverse_mse={mse:.2f}, "
-                f"action_norm={np.linalg.norm(inv_action):.3f}")
+        print(f"  Pair {pi:>5}/{len(pair_data)}: initial={initial_mse:.2f} → restored={restored_mse:.2f} "
+              f"{improved} | action_norm={np.linalg.norm(inv_action):.3f}")
 
 # Summary
 print(f"\n{'='*60}")
 print(f"  INVERSE DEGRADATION SUMMARY")
 print(f"{'='*60}")
-mses = np.array([mse for _, _, mse in supervised_data])
-print(f"  Total pairs:     {len(supervised_data)}")
-print(f"  MSE range:       [{mses.min():.2f}, {mses.max():.2f}]")
-print(f"  MSE mean:        {mses.mean():.2f} ± {mses.std():.2f}")
-print(f"  MSE median:      {np.median(mses):.2f}")
-n_finite = np.sum(np.isfinite(mses))
-print(f"  Valid pairs:     {n_finite}/{len(supervised_data)}")
+restored_mses = np.array([mse for _, _, mse in supervised_data])
+print(f"  Total pairs:         {len(supervised_data)}")
+print(f"  Restored MSE range:  [{restored_mses.min():.2f}, {restored_mses.max():.2f}]")
+print(f"  Restored MSE mean:   {restored_mses.mean():.2f} ± {restored_mses.std():.2f}")
+print(f"  Restored MSE median: {np.median(restored_mses):.2f}")
+n_finite = np.sum(np.isfinite(restored_mses))
+print(f"  Valid pairs:         {n_finite}/{len(supervised_data)}")
 print(f"{'='*60}")
 
 # Save ordered degradation params to a JSON for easy loading later
