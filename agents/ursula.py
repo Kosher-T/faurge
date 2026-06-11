@@ -10,9 +10,9 @@ Architecture
 Input:  143D  (M_degraded 67D || M_reference 67D || cluster_onehot 9D)
 Output: 227D  (tanh-activated, scaled to each plugin parameter's real range)
 
-Hidden:  LayerNorm(143) → Linear(143, 944) → ReLU → Dropout(0.1)
-         Linear(944, 944) → ReLU → Dropout(0.2) + Residual(skip)
-         Linear(944, 472) → ReLU → Dropout(0.3)
+Hidden:  LayerNorm(143) → Linear(143, 512) → ReLU → Dropout(0.1)
+         Linear(512, 512) → ReLU → Dropout(0.1) + Residual(skip)
+         Linear(512, 256) → ReLU
          Plugin Heads → 7 separate Linear layers → Tanh
 
 The 227D output maps to 7 DSP plugins in cascade order:
@@ -232,18 +232,18 @@ class UrsulaPolicy(nn.Module):
     Output: (batch, 227) — tanh-activated raw action in [-1, 1]
 
     Trunk:
-        LayerNorm(143) → Linear(143, 944) → ReLU → Dropout(0.1)
-        Linear(944, 944) → ReLU → Dropout(0.2) + Residual Skip
-        Linear(944, 472) → ReLU → Dropout(0.3)
+        LayerNorm(143) → Linear(143, 512) → ReLU → Dropout
+        Linear(512, 512) → ReLU → Dropout + Residual Skip
+        Linear(512, 256) → ReLU
 
-    Output heads: 7 independent Linear(128, plugin_dim) → Tanh
+    Output heads: 7 independent Linear(256, plugin_dim) → Tanh
     """
 
     def __init__(
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 944,
+        hidden_dim: int = 512,
         dropout: float = 0.1,
         n_clusters: int = N_CLUSTERS_ONEHOT,
     ):
@@ -251,22 +251,21 @@ class UrsulaPolicy(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        # Trunk — depth-dependent dropout to limit memorization
+        # Trunk
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),          # 0.1
+            nn.Dropout(dropout),
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout * 2),      # 0.2
+            nn.Dropout(dropout),
         )
         self.trunk_block3 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),   # 128
+            nn.Linear(hidden_dim, hidden_dim // 2),   # 256
             nn.ReLU(),
-            nn.Dropout(dropout * 3),      # 0.3
         )
 
         # Per-plugin output heads
@@ -569,7 +568,7 @@ class UrsulaSACActor(nn.Module):
         self,
         input_dim: int = INPUT_DIM,
         output_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 944,
+        hidden_dim: int = 512,
         dropout: float = 0.1,
         log_std_min: float = -20.0,
         log_std_max: float = 2.0,
@@ -578,22 +577,21 @@ class UrsulaSACActor(nn.Module):
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
 
-        # Shared trunk — depth-dependent dropout to limit memorization
+        # Shared trunk
         self.trunk_norm = nn.LayerNorm(input_dim)
         self.trunk_block1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout),          # 0.1
+            nn.Dropout(dropout),
         )
         self.trunk_block2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout * 2),      # 0.2
+            nn.Dropout(dropout),
         )
         self.trunk_block3 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
-            nn.Dropout(dropout * 3),      # 0.3
         )
 
         # Per-plugin mu and log_std heads
@@ -664,7 +662,7 @@ class _QNetwork(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 944,
+        hidden_dim: int = 512,
     ):
         super().__init__()
         self.net = nn.Sequential(
@@ -696,7 +694,7 @@ class UrsulaSACCritic(nn.Module):
         self,
         state_dim: int = INPUT_DIM,
         action_dim: int = OUTPUT_DIM,
-        hidden_dim: int = 944,
+        hidden_dim: int = 512,
     ):
         super().__init__()
         self.q1 = _QNetwork(state_dim, action_dim, hidden_dim)
@@ -852,12 +850,10 @@ def _smoke_test():
     high_band_mean = eq_gains_db[20:].mean().item()
     low_band_mean = eq_gains_db[:10].mean().item()
     print(f"  Extreme diff: high-band mean={high_band_mean:.2f} dB, low-band mean={low_band_mean:.2f} dB")
-    # NOTE: untrained random weights have no reason to exhibit directional EQ bias.
-    # This check is informational only — the model will learn this after training.
-    if high_band_mean > low_band_mean:
-        print(f"  [PASS] Extreme difference test: EQ shifts toward bright reference (untrained — coincidental)")
-    else:
-        print(f"  [INFO] EQ does not yet shift toward bright (expected — model is untrained)")
+    assert high_band_mean > low_band_mean, (
+        f"Extreme diff: high bands ({high_band_mean:.2f}) should gain more than low bands ({low_band_mean:.2f})"
+    )
+    print(f"  [PASS] Extreme difference test: EQ shifts toward bright reference")
 
     # --- Parameter count ---
     policy_params = sum(p.numel() for p in policy.parameters())
