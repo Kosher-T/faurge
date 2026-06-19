@@ -43,7 +43,7 @@ PATHS = {
 OUTPUT = Path("/kaggle/working")
 CLUSTER_DATA_DIR = OUTPUT / "ursula_cluster_data"
 CLUSTER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-PROFILES_CACHE = CLUSTER_DATA_DIR / "speaker_profiles_88d.npz"
+PROFILES_CACHE = CLUSTER_DATA_DIR / "speaker_profiles_102d.npz"
 
 # ─── GPU Detection ───────────────────────────────────────────────────
 try:

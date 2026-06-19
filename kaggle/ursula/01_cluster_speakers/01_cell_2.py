@@ -305,10 +305,10 @@ def compute_mfcc_features(audio: np.ndarray, sr: int = SR) -> np.ndarray:
 
 # ─── Full 88D Metrics Extractor ──────────────────────────────────────
 
-def extract_metrics_88d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
+def extract_metrics_102d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
     """
-    Extract full 88D metric vector:
-      LTAS(64) + LUFS(1) + Crest(1) + ZCR(1) + F0(6) + Formants(3) + MFCC(12)
+    Extract full 102D metric vector (Tier 0 — Shared Foundation):
+      LTAS(64) + LUFS(1) + Crest(1) + ZCR(1) + F0(6) + Formants(3) + MFCC(26)
     """
     ltas = compute_ltas_64d(audio, sr)
     lufs = np.array([compute_lufs_1d(audio, sr)])
@@ -316,7 +316,7 @@ def extract_metrics_88d(audio: np.ndarray, sr: int = SR) -> np.ndarray:
     zcr = np.array([compute_zcr(audio)])
     f0 = compute_f0_features(audio, sr)
     formants = compute_formant_features(audio, sr)
-    mfcc = compute_mfcc_features(audio, sr)[:12]
+    mfcc = compute_mfcc_features(audio, sr)  # 26D (13μ + 13σ)
     return np.concatenate([ltas, lufs, crest, zcr, f0, formants, mfcc])
 
 # ─── Speaker Discovery ───────────────────────────────────────────────
@@ -353,8 +353,8 @@ def discover_speakers(paths: dict) -> dict[str, list[Path]]:
 # ─── Speaker Profile Computation ─────────────────────────────────────
 
 def _extract_clip_metrics(audio: np.ndarray) -> np.ndarray:
-    """Extract 88D metrics from a single clip (already at SR, mono, CLIP_SAMPLES)."""
-    return extract_metrics_88d(audio, SR)
+    """Extract 102D metrics from a single clip (already at SR, mono, CLIP_SAMPLES)."""
+    return extract_metrics_102d(audio, SR)
 
 
 def compute_speaker_profiles(
@@ -443,7 +443,7 @@ def compute_speaker_profiles(
 
         elapsed = time.time() - t0
         print(f"  [{idx}/{total_speakers}] {speaker_id}: "
-              f"{len(metrics_list)} clips → 67D ({elapsed:.1f}s)")
+              f"{len(metrics_list)} clips → 102D ({elapsed:.1f}s)")
 
         gc.collect()
 
@@ -685,7 +685,7 @@ def save_outputs(
     for idx, sid in enumerate(speaker_ids):
         clusters[sid] = {
             "cluster": int(cluster_labels[idx]),
-            "profile_88d": speaker_profiles[sid].tolist(),
+            "profile_102d": speaker_profiles[sid].tolist(),
             "gender": "unknown",
         }
     clusters_path = output_dir / "clusters.json"
@@ -696,7 +696,7 @@ def save_outputs(
     centroids_json = {}
     for key in centroids:
         centroids_json[key] = {
-            "centroid_88d": centroids[key].tolist(),
+            "centroid_102d": centroids[key].tolist(),
             "threshold": thresholds[key],
         }
     centroids_path = output_dir / "cluster_centroids.json"
