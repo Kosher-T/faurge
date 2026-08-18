@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Phase 1: Metric Literacy (162D → 81D)
+# Step 1be — Phase 1: Metric Literacy (162D → 81D)
 # ══════════════════════════════════════════════════════════════════════════════
 # Train model to reconstruct reference 81D metrics from [degraded, reference].
 # Degradation: EQ only (no global gain) — forces model to learn spectral changes.

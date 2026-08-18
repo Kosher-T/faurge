@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Degradation Functions
+# Step 1be — Degradation Functions
 # ══════════════════════════════════════════════════════════════════════════════
 # Both phases use EQ degradation — gain-only doesn't change Tier 1 features
 # (spectral shape), so the model can't learn them. EQ forces the model to

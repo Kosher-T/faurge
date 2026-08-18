@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — RMS Metric Literacy + Multi-Clip EQ Prediction: Setup
+# Step 1be — RMS Metric Literacy + Multi-Clip EQ Prediction: Setup
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 1: Metric literacy (162D → 81D). Degradation: EQ only (no global gain).
 #   Input:  [degraded_81D, reference_81D] = 162D
@@ -34,10 +34,10 @@ PLUGIN_DIR = Path('/kaggle/usr/lib/notebooks/itorousa')
 
 # ── Cache — upload completed datasets as Kaggle datasets, set paths here ────
 # Set to None to generate from scratch. Set to a path to load from cache.
-PHASE1_CACHE = None  # e.g. '/kaggle/input/step2-phase1/phase1_dataset.npz'
-PHASE2_CACHE = None  # e.g. '/kaggle/input/step2-phase2/phase2_dataset.npz'
+PHASE1_CACHE = None  # e.g. '/kaggle/input/step1be-phase1/phase1_dataset.npz'
+PHASE2_CACHE = None  # e.g. '/kaggle/input/step1be-phase2/phase2_dataset.npz'
 # Phase 2 partial — upload partial .npz as Kaggle dataset to resume across sessions
-PHASE2_PARTIAL_LOAD = None  # e.g. '/kaggle/input/step2-partial/data/phase2_partial.npz'
+PHASE2_PARTIAL_LOAD = None  # e.g. '/kaggle/input/step1be-partial/data/phase2_partial.npz'
 # Eval datasets are resumable via partial saves (no manual upload needed)
 
 # ── EQ settings ──────────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ GLOBAL_GAIN_LOSS_WEIGHT = 0.30
 # ── Paths ────────────────────────────────────────────────────────────────────
 INPUT = Path('/kaggle/input')
 OUTPUT = Path('/kaggle/working')
-STEP_DIR = OUTPUT / 'step_2'
+STEP_DIR = OUTPUT / 'step_1be'
 CHECKPOINT_DIR = STEP_DIR / 'checkpoints'
 DATA_DIR = STEP_DIR / 'data'
 PHASE1_MODEL_PATH = CHECKPOINT_DIR / 'phase1_best_model.pt'
@@ -148,7 +148,7 @@ print(f"Device: {device}")
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 total = (N_TRAIN_CLIPS + N_TEST_CLIPS) * len(FREQ_CURRICULUM) * DEGRADATIONS_PER_CLIP
-print(f"\nStep 2: RMS Metric Literacy + Multi-Clip EQ Prediction")
+print(f"\nStep 1be: RMS Metric Literacy + Multi-Clip EQ Prediction")
 print(f"{'='*60}")
 print(f"Metric dim: {METRIC_DIM}D (67D Tier 0 + 13D Tier 1 + 1D RMS)")
 print(f"Train clips: {N_TRAIN_CLIPS} | Test clips: {N_TEST_CLIPS}")

@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Phase 2: EQ Prediction Model (162D → 3D)
+# Step 1be — Phase 2: EQ Prediction Model (162D → 3D)
 # ══════════════════════════════════════════════════════════════════════════════
 # Load Phase 1 encoder, build EQ prediction head.
 # Input:  162D = [degraded_81D, reference_81D]

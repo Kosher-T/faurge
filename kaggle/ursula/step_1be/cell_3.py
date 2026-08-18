@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Metric Extraction (81D)
+# Step 1be — Metric Extraction (81D)
 # ══════════════════════════════════════════════════════════════════════════════
 # Tier 0 (67D): LTAS64 + LUFS + Crest + ZCR
 # Tier 1 (13D): Centroid, Bandwidth, Flatness, Flux, Rolloff, Skewness,

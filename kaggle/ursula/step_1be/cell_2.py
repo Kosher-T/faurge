@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Load Audio (DAPS + VCTK, Dynamic Speaker Selection)
+# Step 1be — Load Audio (DAPS + VCTK, Dynamic Speaker Selection)
 # ══════════════════════════════════════════════════════════════════════════════
 # Scan both DAPS and VCTK datasets. Pick speakers at random.
 # VCTK has no gender tags — just speaker directories like p225, p226.

@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Phase 2: Train + Evaluate (2×2 Matrix)
+# Step 1be — Phase 2: Train + Evaluate (2×2 Matrix)
 # ══════════════════════════════════════════════════════════════════════════════
 # Train EQ prediction model on multiple clips, multiple speakers.
 # Evaluate on 2×2 matrix: seen/unseen clips × seen/unseen freqs.

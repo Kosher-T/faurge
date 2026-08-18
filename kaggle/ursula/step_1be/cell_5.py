@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2 — Generate Datasets
+# Step 1be — Generate Datasets
 # ══════════════════════════════════════════════════════════════════════════════
 # Phase 1 dataset (metric literacy): EQ degradation
 # Phase 2 dataset (EQ prediction): 1 EQ band + global gain
