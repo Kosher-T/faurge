@@ -111,27 +111,40 @@ What each step trained the model to do, what it learned, and what's missing.
 - Unseen frequencies: freq=5.9%, gain=0.48 dB
 - Gap: +0.6% freq, +0.02 dB gain — essentially zero
 
-**Key insight:** Model generalizes perfectly to unseen frequencies. The80D metric representation captures enough information to predict EQ parameters across the full frequency range.
+**Key insight:** Model generalizes perfectly to unseen frequencies. The 80D metric representation captures enough information to predict EQ parameters across the full frequency range.
 
 **Limitation:** Single band only. No global gain. Trained on 10 speakers — limited speaker diversity.
 
 ---
 
-## Step 1be — 2 EQ Bands + Global Gain (FAILED)
+## Step 1be — RMS Metric Literacy + Multi-Clip EQ Prediction (revised)
 
-**Input:** 160D (80 degraded + 80 clean metrics)
-**Output:** 5D (freq1, gain1, freq2, gain2, global_gain)
-**Degradation:** 2 EQ bands + global gain
-**Clips:** 3 (2 train + 1 test)
+**Input:** 162D = [degraded_81D, reference_81D] (81D = 80D + RMS Energy)
+**Output:** Phase 1: 81D (reference metrics) | Phase 2: 3D (freq, eq_gain, global_gain)
+**Degradation:** Phase 1: EQ only (no global gain) | Phase 2: EQ + global gain
+**Clips:** 8 train + 2 test (DAPS + VCTK, dynamic speaker selection)
+**Frequencies:** 147 log-spaced (120 train, 27 unseen for generalization testing)
+**Samples:** Phase 1: 8 clips × 200 degradations = 1,600 | Phase 2: 8 clips × 120 freqs × 200 = 192,000
 
-**What it tried to do:** Predict ALL parameters for 2 EQ bands plus global gain.
+**What it tried to do:** Address the three gaps identified in step 1bd:
+1. **Tier 1 features not learned** — Phase 1 uses EQ degradation (not gain-only) so spectral shape actually changes
+2. **No global gain separation** — RMS energy added to help model distinguish signal level from spectral shape
+3. **Speaker diversity** — 8+ speakers from DAPS + VCTK instead of 10 from one dataset
 
-**Result:** FAILED.
-- Seen×seen: freq=292%, gain=4.10 dB, global=0.28 dB
-- Unseen×unseen: freq=747%, gain=5.43 dB, global=1.82 dB
-- Model learned global gain only. Failed on EQ parameters entirely.
+**Phase 1 — Metric Literacy (162D → 81D):**
+- Trains encoder to reconstruct clean 81D metrics from degraded+reference pair
+- EQ degradation forces model to learn how spectral features change with EQ
+- Saves encoder weights for Phase 2 initialization
 
-**Root cause:** Only 2 speakers → model can't separate speaker-specific spectral shape from EQ effects.
+**Phase 2 — EQ Prediction (162D → 3D):**
+- Loads Phase 1 encoder, adds prediction head
+- Predicts [freq, eq_gain, global_gain] from degraded+reference pair
+- Encoder unfreezes during training
+- Loss weights: freq=0.35, eq_gain=0.35, global_gain=0.30
+
+**Eval:** 2×2 matrix (seen/unseen clips × seen/unseen frequencies)
+
+**Status:** Not yet run on Kaggle. Previous attempt (original step_1be with 3 clips, 2 EQ bands) failed — model learned global gain only.
 
 ---
 
@@ -141,14 +154,13 @@ What each step trained the model to do, what it learned, and what's missing.
 |------------|--------|------|
 | Tier 0 metric reconstruction (67D) | ✅ Learned | Step 0 |
 | Tier 1 metric reconstruction (13D) | ⚠️ Partially learned (gain-only doesn't change them) | Step 1bc |
-| RMS energy | ✅ Learned | Step 2 (planned) |
 | Global gain prediction | ✅ Learned (MAE 0.06dB) | Step 1b |
 | EQ gain prediction (single band) | ✅ Learned | Step 1ba |
 | EQ frequency prediction | ✅ Learned (5.3% MAE) | Step 1bd |
 | EQ freq + gain (joint) | ✅ Learned, generalizes to unseen freqs | Step 1bd |
-| Multi-band EQ | ❌ Failed (needs more speakers) | Step 1be |
-| Global gain + EQ separation | ❌ Not learned | — |
-| Unseen speaker generalization | ❌ Failed (2 speakers insufficient) | Step 1be |
+| RMS energy | 🔜 Planned (81D) | Step 1be |
+| Multi-clip EQ + global gain | 🔜 Planned (3D) | Step 1be |
+| Unseen speaker generalization | 🔜 Planned (8+ speakers) | Step 1be |
 
 ---
 
@@ -160,17 +172,18 @@ Step 1bd proved the model CAN predict EQ frequency + gain from 80D metrics, and 
 
 2. **No global gain separation** — the model hasn't learned to separate "how loud is the signal" (global gain) from "what's the spectral shape" (EQ). RMS energy was added to help with this.
 
-3. **Speaker diversity matters** — 2 speakers failed. 8+ speakers needed for unseen-clip generalization.
+3. **Speaker diversity matters** — 2 speakers failed (original step_1be). 8+ speakers needed for unseen-clip generalization.
 
 ---
 
-## What the Next Step Should Teach
+## What Step 1be Should Teach
 
-The next step needs to:
+Step 1be addresses all three gaps:
 
-1. **Teach Tier 1 features for real** — use degradation that changes spectral shape (EQ), not just level (gain)
-2. **Separate global gain from EQ** — RMS energy should help the model distinguish "signal level" from "spectral shape"
-3. **Generalize to unseen speakers** — train on 8+ speakers from DAPS + VCTK
-4. **Predict EQ parameters** — frequency + gain (1 band) + global gain
+1. **Teach Tier 1 features for real** — Phase 1 uses EQ degradation (not gain-only), forcing the model to learn how spectral features change when EQ is applied.
 
-This is exactly what Step 2 was designed to do — but Phase 1 (metric literacy) needs to use EQ degradation, not gain-only, for the model to actually learn Tier 1 features.
+2. **Separate global gain from EQ** — RMS energy (81D) helps the model distinguish signal level from spectral shape. Phase 2 trains on EQ + global gain jointly.
+
+3. **Generalize to unseen speakers** — 8 train + 2 test speakers from DAPS + VCTK. Dynamic speaker selection (no fixed gender split).
+
+**Key design choice:** Both phases use 162D input = [degraded_81D, reference_81D]. The reference metrics give the model a target to compare against — it learns "here's what the audio should sound like, here's what it sounds like now, predict what happened to it."
